@@ -1,0 +1,1265 @@
+/*
+ * VOID·SPACE — design system.
+ *
+ * Direction: "Ethereal Glass" for a 3D asset marketplace. Deep OLED ground, two very low-opacity
+ * radial light sources so the page has depth instead of being flat black, glass only on the layers
+ * that float above content (headers, dialogs, toolbars), and a single violet accent kept for the
+ * things that deserve attention: the primary action, the active nav item, a live licence.
+ *
+ * The previous system was a "tactical telemetry" terminal — monospace everywhere, zero radius, no
+ * shadows, all-caps micro-labels. It was coherent, but it read as an instrument panel, which is the
+ * wrong impression for a marketplace whose whole point is that 3D objects look good. This keeps the
+ * data density and the honesty of the states, and changes the presentation.
+ *
+ * Class names are unchanged on purpose: screens that have not been restructured yet inherit the new
+ * language and stay consistent rather than half-old, half-new.
+ */
+
+/*
+ * Typography is self-hosted.
+ *
+ * Plus Jakarta Sans for interface and display, JetBrains Mono for identifiers and figures. The
+ * files live in apps/web/public/fonts and are served from our own origin: a marketplace that
+ * renders nothing until fonts.googleapis.com answers is broken on a locked-down network — and
+ * the container build cannot reach Google at all.
+ */
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/plus-jakarta-sans-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/plus-jakarta-sans-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/plus-jakarta-sans-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/plus-jakarta-sans-800.woff2') format('woff2');
+}
+
+/*
+ * Instrument Serif — catalogue headings only.
+ *
+ * A serif at display size is what separates a *catalogue* from a dashboard. It also does a job the
+ * sans cannot: at 56px it holds a long asset name on one line without shouting, so the model stays
+ * the loudest thing on the page. Not used below 20px, and never for UI text.
+ */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/instrument-serif-regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/instrument-serif-italic.woff2') format('woff2');
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * TOKENS — "Foundry" direction.
+ *
+ * The previous palette was violet-on-OLED with translucent-white surfaces and a radial glow behind
+ * the hero. It is the most-produced look on the web and it made a catalogue of scanned objects read
+ * as a SaaS dashboard: nothing on the page looked like it had been *made*. This one is the opposite
+ * by construction.
+ *
+ * Three rules hold it together:
+ *
+ *  1. **Solid, not translucent.** Panels are opaque greys. Depth comes from one 1px line and one
+ *     honest shadow, so an elevated surface reads as a physical layer rather than a fog.
+ *  2. **Colour is information.** The interface itself is monochrome — graphite ground, paper text.
+ *     Saturated colour appears only where it carries meaning: a lifecycle state, a live licence, a
+ *     failed decode. A verified on-chain record is the product's whole claim, so it gets a hue and
+ *     nothing decorative competes with it.
+ *  3. **Paper primary, ink on top.** The strongest action is the least coloured button on the page.
+ */
+:root {
+  /* --- ground: graphite, layered so elevation is legible without glow -------------------- */
+  --vs-bg: #08080a;
+  --vs-surface: #101013;
+  --vs-surface-2: #16161a;
+  --vs-surface-3: #1d1d22;
+  --vs-line: #232329;
+  --vs-line-strong: #34343d;
+
+  /* --- text ramp ------------------------------------------------------------------------ */
+  --vs-fg: #f3f3f5;
+  --vs-fg-dim: #9d9daa;
+  --vs-fg-faint: #6c6c7a;
+
+  /* --- interactive accent: cobalt. Links, focus, selected state. Never decorative. -------- */
+  --vs-accent: #6ea8fe;
+  --vs-accent-warm: #9dc4ff;
+  /* Text that sits on the paper (primary) button. */
+  --vs-accent-ink: #0a0a0c;
+
+  /* Verification / live. Reserved for the provenance claim: a valid licence, a pinned CID. */
+  --vs-signal: #3ddc97;
+  /* --- the second signal, used by the 3D studio for axes and measurement ---------------- */
+  --vs-axis-x: #ff6b6b;
+  --vs-axis-y: #6ee7a8;
+  --vs-axis-z: #6ea8fe;
+
+  /* Lifecycle status encodings (SRS §5.1), tuned for a dark ground. */
+  --vs-draft: #8b8b99;
+  --vs-pending: #e8b13f;
+  --vs-review: #f08a6c;
+  --vs-approved: #3ddc97;
+  --vs-published: #6ef0b4;
+  --vs-rejected: #f0655f;
+  --vs-revision: #e8b13f;
+
+  /*
+   * The select affordance.
+   *
+   * A percent-encoded SVG, so the URI contains no space or quote and can therefore live in a custom
+   * property. It is here rather than in a Tailwind theme key on purpose: `tailwind-merge` cannot tell
+   * an unrecognised `bg-` value apart from a background *colour*, so any custom `bg-…` key sharing a
+   * `cn()` call with another `bg-…` class silently deletes it — `cn('bg-surface', 'bg-select-chevron')`
+   * keeps only one of the two, and which one it keeps depends on what else is in the string. A token
+   * read by a plain CSS rule cannot be lost that way.
+   */
+  --vs-select-chevron: url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2212%22%20height=%2212%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%23737373%22%20stroke-width=%222%22%3E%3Cpath%20d=%22m6%209%206%206%206-6%22/%3E%3C/svg%3E");
+
+  /* --- type ----------------------------------------------------------------------------- */
+  --vs-font-sans:
+    'Plus Jakarta Sans', 'Segoe UI', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --vs-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* An editorial serif for catalogue headings. Self-hosted like the rest (see the @font-face notes). */
+  --vs-font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+
+  /* --- geometry: tighter than before. Big pill radii read as "template". ---------------- */
+  --vs-radius-sm: 6px;
+  --vs-radius: 10px;
+  --vs-radius-lg: 14px;
+
+  /* Neutral elevation. No coloured bloom: that is what made the old build look generated. */
+  --vs-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px -12px rgba(0, 0, 0, 0.8);
+  --vs-shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.65), 0 32px 64px -24px rgba(0, 0, 0, 0.9);
+
+  --vs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* --- spacing rhythm: one scale, so vertical space is a decision and not a guess -------- */
+  --vs-gutter: clamp(16px, 3.2vw, 40px);
+  --vs-max: 1440px;
+}
+
+html,
+body {
+  background: var(--vs-bg);
+  color: var(--vs-fg);
+}
+
+body {
+  font-family: var(--vs-font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--vs-accent);
+  color: var(--vs-accent-ink);
+}
+
+
+
+
+
+
+
+/* --- Motion --------------------------------------------------------------------------- */
+
+/* Elements never appear statically; each view lifts in once. Transform + opacity only. */
+
+
+/* Scrollbars in the same register as the substrate. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/*
+ * `vs-card-well` holds thumbnails and model canvases. A studio drop is a flat neutral with a soft
+ * top light — the same trick a photographer uses so the object separates from its background.
+ */
+.studio-viewport {
+  background: radial-gradient(120% 90% at 50% 0%, #1e1e24 0%, #131317 52%, #0c0c0f 100%);
+}
+
+/* ============================================================================================
+ * 3D STUDIO
+ *
+ * The viewer is the product, so its chrome is dense, monospaced where it counts, and out of the
+ * way. Every control here answers a question a 3D artist actually asks of a file they are about to
+ * license: is the topology clean, do the normals face the right way, are the UVs unfolded, what are
+ * the real dimensions, how many materials and textures are in it, and does it animate.
+ * ========================================================================================== */
+
+.studio {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0c0c0f;
+}
+
+.studio-viewport {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.studio-viewport canvas {
+  display: block;
+  outline: none;
+}
+
+/* --- top toolbar: segmented controls, left aligned ---------------------------------------- */
+
+.studio-top {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 12;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.studio-top>* {
+  pointer-events: auto;
+}
+
+.studio-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--vs-line-strong);
+  border-radius: 8px;
+  background: rgba(16, 16, 19, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.studio-top .studio-spacer {
+  margin-left: auto;
+}
+
+.studio-btn {
+  border: 1px solid var(--vs-line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--vs-fg);
+  font-family: var(--vs-font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.studio-btn:hover {
+  color: var(--vs-fg);
+  background: var(--vs-surface-3);
+  border-color: var(--vs-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.studio-btn[aria-pressed='true'] {
+  color: var(--vs-accent-ink);
+  background: var(--vs-fg);
+  border: 1px solid var(--vs-accent);
+  box-shadow: 0 0 0 1px var(--vs-accent);
+  font-weight: 600;
+}
+
+.studio-btn:focus-visible {
+  outline: 2px solid var(--vs-accent);
+  outline-offset: 1px;
+}
+
+/* A label that names a group without shouting. */
+.studio-group-label {
+  font-family: var(--vs-font-sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vs-fg-faint);
+  padding: 0 5px 0 7px;
+  border-right: 1px solid var(--vs-line);
+  margin-right: 3px;
+  line-height: 1.6;
+}
+
+/* --- bottom strip: identity + integrity ---------------------------------------------------- */
+
+.studio-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 9px 13px;
+  background: linear-gradient(to top, rgba(8, 8, 10, 0.94), rgba(8, 8, 10, 0.35) 70%, transparent);
+}
+
+.studio-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-family: var(--vs-font-mono);
+  font-size: 11.5px;
+  color: var(--vs-fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-meta a {
+  color: var(--vs-fg-faint);
+  text-decoration: none;
+}
+
+.studio-meta a:hover {
+  color: var(--vs-fg);
+}
+
+.studio-ok {
+  color: var(--vs-signal);
+}
+
+.studio-warn {
+  color: var(--vs-rejected);
+}
+
+/* --- hint --------------------------------------------------------------------------------- */
+
+.studio-hint {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  pointer-events: none;
+  font-size: 12px;
+  color: var(--vs-fg-faint);
+  background: rgba(8, 8, 10, 0.8);
+  border: 1px solid var(--vs-line);
+  border-radius: 999px;
+  padding: 5px 13px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .studio-hint {
+    display: none;
+  }
+}
+
+/* --- stats panel -------------------------------------------------------------------------- */
+
+.studio-panel {
+  position: absolute;
+  top: 56px;
+  right: 10px;
+  z-index: 13;
+  width: 268px;
+  max-height: calc(100% - 108px);
+  overflow-y: auto;
+  border: 1px solid var(--vs-line-strong);
+  border-radius: 10px;
+  background: rgba(16, 16, 19, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--vs-shadow-lg);
+}
+
+.studio-panel-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--vs-line);
+  background: rgba(16, 16, 19, 0.98);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vs-fg);
+}
+
+.studio-panel-body {
+  padding: 4px 12px 12px;
+}
+
+.studio-section {
+  padding-top: 11px;
+}
+
+.studio-section+.studio-section {
+  border-top: 1px solid var(--vs-line);
+}
+
+.studio-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--vs-fg-faint);
+}
+
+.studio-row b {
+  font-family: var(--vs-font-mono);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--vs-fg);
+  letter-spacing: -0.01em;
+}
+
+.studio-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex: none;
+  display: inline-block;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+
+.studio-mat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--vs-fg-dim);
+}
+
+.studio-mat span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-mat em {
+  font-style: normal;
+  font-family: var(--vs-font-mono);
+  font-size: 11px;
+  color: var(--vs-fg-faint);
+  flex: none;
+}
+
+/* --- animation transport ------------------------------------------------------------------- */
+
+.studio-transport {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 40px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px;
+  border: 1px solid var(--vs-line-strong);
+  border-radius: 9px;
+  background: rgba(16, 16, 19, 0.94);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+
+.studio-transport input[type='range'] {
+  flex: 1;
+  min-width: 80px;
+  accent-color: var(--vs-accent);
+  height: 3px;
+}
+
+.studio-transport select {
+  background: var(--vs-surface-2);
+  border: 1px solid var(--vs-line-strong);
+  border-radius: 5px;
+  color: var(--vs-fg);
+  font-size: 12px;
+  padding: 4px 6px;
+  max-width: 168px;
+}
+
+.studio-clip-time {
+  font-family: var(--vs-font-mono);
+  font-size: 11px;
+  color: var(--vs-fg-faint);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+/* --- loading + fault ---------------------------------------------------------------------- */
+
+.studio-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(8, 8, 10, 0.72);
+}
+
+.studio-loading-track {
+  width: 168px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--vs-line-strong);
+  overflow: hidden;
+}
+
+.studio-loading-track i {
+  display: block;
+  height: 100%;
+  background: var(--vs-accent);
+  transition: width 180ms linear;
+}
+
+.studio-fault {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  overflow-y: auto;
+}
+
+.studio-fault-inner {
+  max-width: 430px;
+}
+
+.studio-fault code {
+  display: block;
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--vs-line);
+  border-radius: var(--vs-radius-sm);
+  background: var(--vs-surface-2);
+  font-family: var(--vs-font-mono);
+  font-size: 11px;
+  color: var(--vs-fg-dim);
+  overflow-wrap: anywhere;
+}
+
+/* --- fullscreen --------------------------------------------------------------------------- */
+
+.studio:fullscreen {
+  border-radius: 0;
+  background: #0a0a0c;
+}
+
+/* Below 860px the toolbar would collide with the panel: hide the panel instead of stacking. */
+@media (max-width: 860px) {
+  .studio-panel {
+    display: none;
+  }
+}
+
+/*
+ * The studio fills whatever stage it is dropped into. Scoped to `.studio` rather than any child
+ * div: the hero already supplies its own frame, and a blanket rule would stretch unrelated
+ * children of the same box.
+ */
+
+/* ------------------------------------------------------------------------------------------------
+   Studio controls, v2 — a real inspection tool.
+
+   The control bar now carries every professional viewing mode, so it grew from 15 to 23 buttons. Three
+   changes keep that from reading as clutter: the keyboard shortcut is printed on every button (so the
+   tool teaches itself instead of hiding behind tooltips), group labels are lowercase and quiet, and a
+   hairline divider separates the projection toggle from the viewpoints it modifies.
+   ------------------------------------------------------------------------------------------------ */
+
+/* The shortcut chip. Deliberately low-contrast: it is a mnemonic, not a label. */
+.studio-btn kbd {
+  margin-left: 5px;
+  padding: 1px 3px;
+  border: 1px solid var(--vs-line-strong);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--vs-fg-faint);
+  font-family: var(--vs-font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+/* On the active control the chip inverts with the button, or it disappears into the fill. */
+.studio-btn[aria-pressed='true'] kbd {
+  border-color: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.12);
+  color: inherit;
+  opacity: 0.75;
+}
+
+.studio-btn:disabled kbd {
+  opacity: 0.4;
+}
+
+/* Separates a modifier (projection) from the set it modifies (viewpoints). */
+.studio-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--vs-line-strong);
+}
+
+/* Tiny preview of the current backdrop, so cycling it is not a blind click. */
+.studio-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  border: 1px solid var(--vs-line-strong);
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.studio-swatch[data-backdrop='stage'] {
+  background: linear-gradient(160deg, #3a3a44, #14141a);
+}
+
+.studio-swatch[data-backdrop='night'] {
+  background: #08080a;
+}
+
+.studio-swatch[data-backdrop='paper'] {
+  background: linear-gradient(160deg, #fbfbfd, #c9c9d0);
+}
+
+.studio-hint-sep {
+  display: inline-block;
+  width: 1px;
+  height: 10px;
+  margin: 0 9px;
+  background: currentColor;
+  opacity: 0.35;
+  vertical-align: -1px;
+}
+
+.studio-hint strong {
+  color: var(--vs-fg);
+  font-weight: 600;
+}
+
+/* Tighter buttons: 23 of them have to fit two rows on a laptop, not four. */
+.studio-btn {
+  padding: 4px 7px;
+  font-size: 11.5px;
+}
+
+.studio-group-label {
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  font-style: italic;
+}
+
+/* ============================================================================================
+ * Readability pass over the 3D studio chrome
+ * --------------------------------------------------------------------------------------------
+ * The group labels ("surface", "camera", "overlays") were rendering in `--vs-fg-faint` at 10.5px,
+ * which measures about 2.6:1 against the toolbar — below the 4.5:1 that body text needs, and these
+ * are not decorative: they are the only thing telling a reader which cluster of buttons changes
+ * shading versus which changes the camera. There are two competing rule sets for this element in
+ * this file, so the fix is stated once, last, and with the reasoning attached.
+ */
+.studio-group-label {
+  color: var(--vs-fg-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+/* The keyboard chips on the buttons are secondary information, but they were faded to the point of
+   being unreadable. They still sit behind the labels, just legibly. */
+.studio-btn kbd {
+  color: var(--vs-fg-dim);
+}
+
+.studio-btn[aria-pressed='true'] kbd {
+  color: var(--vs-fg);
+}
+
+/* ============================================================================================
+ * STUDIO LAYOUT — the chrome gets its own space
+ * --------------------------------------------------------------------------------------------
+ * Every control in this viewer used to float *on top of* the model: the toolbar, the transport,
+ * the inventory panel and the integrity strip were absolutely positioned over the canvas. That is a
+ * common pattern and the wrong one here. A 3D file is the thing being inspected, and a surface that
+ * sits behind buttons cannot be judged — you cannot tell a lighting artefact from a toolbar shadow,
+ * and an object that a control covers is an object you have not inspected.
+ *
+ * So the studio is now a grid of named regions, and each piece of chrome occupies one. DOM order is
+ * unchanged (the viewport is still first), because grid areas place items independently of order —
+ * which is what makes this a layout change rather than a rewrite of the markup.
+ *
+ *   toolbar | transport | viewport | dock | hint | status
+ *
+ * The `dock` column only exists when the inventory is open: the second track is `auto`, so an absent
+ * panel collapses to zero width instead of leaving a gutter beside the canvas.
+ * ========================================================================================== */
+.studio {
+  display: grid;
+  grid-template-areas:
+    'toolbar'
+    'transport'
+    'viewport'
+    'hint'
+    'dock'
+    'status';
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+}
+
+@media (min-width: 1080px) {
+  .studio {
+    grid-template-areas:
+      'toolbar   toolbar'
+      'transport transport'
+      'viewport  dock'
+      'hint      hint'
+      'status    status';
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  }
+}
+
+/* The one genuine overlay that remains, and only while bytes are in flight. */
+.studio-loading {
+  grid-area: viewport;
+}
+
+/* --- toolbar: a real row above the canvas ------------------------------------------------ */
+.studio-top {
+  grid-area: toolbar;
+  position: static;
+  inset: auto;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--vs-line);
+  background: var(--vs-surface-2);
+  /* No longer floating, so it does not need pointer-events delegation. */
+  pointer-events: auto;
+}
+
+/*
+ * The buttons used a translucent glass background because the canvas showed through them. Docked on a
+ * solid surface, the blur is both pointless and expensive — `backdrop-filter` forces a compositor
+ * layer per group for an effect nobody can see.
+ */
+.studio-group {
+  background: var(--vs-surface-3);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* --- viewport: the model, and nothing else ------------------------------------------------ */
+.studio-viewport {
+  grid-area: viewport;
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* --- inventory dock ----------------------------------------------------------------------- */
+.studio-dock {
+  grid-area: dock;
+  overflow-y: auto;
+  max-height: 46vh;
+  border-top: 1px solid var(--vs-line);
+  background: var(--vs-surface-2);
+}
+
+@media (min-width: 1080px) {
+  .studio-dock {
+    width: 304px;
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--vs-line);
+  }
+}
+
+/* --- animation transport: its own row, tight under the toolbar ---------------------------- */
+.studio-transport {
+  grid-area: transport;
+  position: static;
+  inset: auto;
+  margin: 0;
+  border-radius: 0;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  border-bottom: 1px solid var(--vs-line);
+  background: var(--vs-surface-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 8px 12px;
+}
+
+/* --- hint: a caption line, not a chip over the model --------------------------------------- */
+.studio-hint {
+  grid-area: hint;
+  position: static;
+  inset: auto;
+  transform: none;
+  justify-self: start;
+  margin: 0 12px 10px;
+  white-space: normal;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--vs-fg-dim);
+}
+
+/* --- status strip: identity + integrity ---------------------------------------------------- */
+.studio-bottom {
+  grid-area: status;
+  position: static;
+  inset: auto;
+  padding: 9px 13px;
+  border-top: 1px solid var(--vs-line);
+  background: var(--vs-surface-2);
+}
+
+/* Full screen: the same regions, filling the display. */
+.studio:fullscreen {
+  height: 100vh;
+  background: #0c0c0f;
+}
+
+/* Toolbar groups stack vertically; each group is a single non-wrapping row. */
+
+/* Denser controls, still above the 4.5:1 contrast floor set earlier for these labels. */
+.studio-btn {
+  padding: 4px 8px;
+  font-size: 11.5px;
+}
+
+.studio-group {
+  padding: 2px;
+  flex: none;
+}
+
+/* The actions sit at the end of the row and stay reachable without scrolling past every mode. */
+.studio-top .studio-spacer {
+  margin-left: auto;
+}
+
+/* ============================================================================================
+ * FIRECRAWL LAYER — the whole product, retuned to the system in `DESIGN.md`.
+ *
+ * Two surfaces, one token set:
+ *
+ *   `mk-`  the storefront — landing page, catalogue, model page. Firecrawl's language: heat
+ *          orange against near-neutral surfaces, a 4px spacing rhythm, 8/12/16px radii, mono
+ *          labels, and a hero that leads with a real 3D model rather than a screenshot of one.
+ *   `os-`  the operations console — the *layout* vocabulary of a marketplace (chain pill, filter
+ *          rail, item grid, stat row, activity table) rendered in the same palette, so a buyer and
+ *          an operator are visibly in the same product.
+ *
+ * Everything above this comment still exists and still resolves — the earlier layers were never
+ * deleted, they were superseded, exactly as the FOUNDRY LAYER note above describes. This block is
+ * now the single source of truth for how the product looks.
+ *
+ * Colour discipline (DESIGN.md, "Do's and Don'ts"): heat is for state and for the single most
+ * important action on a view. It is not a decorative wash. The accent ramp below is semantic —
+ * amethyst escalates, honey waits, forest succeeds, crimson fails — never chosen for variety.
+ * ========================================================================================== */
+
+/* ------------------------------------------------------------------ tokens ---------------- */
+
+:root {
+  /* --- Firecrawl palette. Values are the Dark theme from DESIGN.md; the Light equivalents are in
+         the document, and the semantic names here are the only thing that would have to change. --- */
+  --fc-heat: #fa5d19;
+  --fc-heat-dim: #c9480f;
+  --fc-heat-warm: #ff7a3d;
+  --fc-bg: #0a0a0a;
+  --fc-bg-lighter: #141414;
+  --fc-surface: #171717;
+  --fc-surface-raised: #1f1f1f;
+  --fc-fg: #f5f5f5;
+
+  /* Heat at fixed opacities — the brand ramp, for tints, rails and the pressed state. */
+  --fc-heat-4: rgba(250, 93, 25, 0.04);
+  --fc-heat-8: rgba(250, 93, 25, 0.08);
+  --fc-heat-12: rgba(250, 93, 25, 0.12);
+  --fc-heat-16: rgba(250, 93, 25, 0.16);
+  --fc-heat-20: rgba(250, 93, 25, 0.2);
+  --fc-heat-40: rgba(250, 93, 25, 0.4);
+
+  /* Translucent neutrals. In Dark these are white-alpha, which is why every hairline reads as a
+     lightened edge rather than a shadow. */
+  --fc-a-4: rgba(255, 255, 255, 0.04);
+  --fc-a-6: rgba(255, 255, 255, 0.06);
+  --fc-a-8: rgba(255, 255, 255, 0.08);
+  --fc-a-12: rgba(255, 255, 255, 0.12);
+  --fc-a-16: rgba(255, 255, 255, 0.16);
+  --fc-a-24: rgba(255, 255, 255, 0.24);
+  --fc-a-40: rgba(255, 255, 255, 0.4);
+  --fc-a-56: rgba(255, 255, 255, 0.56);
+  --fc-a-72: rgba(255, 255, 255, 0.72);
+
+  /* --- Semantic. The heat button is the one place depth is allowed to be loud. ------------- */
+  --fc-shadow-heat: inset 0 -6px 12px 0 rgba(255, 0, 0, 0.2),
+    0 0.6px 0.8px 0 rgba(255, 139, 0, 0.22), 0 1.3px 1.7px 0 rgba(255, 139, 0, 0.19),
+    0 2.5px 3.1px 0 rgba(255, 139, 0, 0.16), 0 4.4px 5.5px 0 rgba(255, 139, 0, 0.13),
+    0 8.3px 10.3px 0 rgba(255, 139, 0, 0.1), 0 2px 4px 0 rgba(250, 93, 25, 0.3);
+
+  /* --- Retuning the shared ramp onto the Firecrawl scale. Same variable names, new values: the
+         screens above this comment keep working and inherit the language. ------------------- */
+  --vs-bg: var(--fc-bg);
+  --vs-surface: var(--fc-surface);
+  --vs-surface-2: var(--fc-surface-raised);
+  --vs-surface-3: #262626;
+  --vs-line: #2a2a2a;
+  --vs-line-strong: #404040;
+
+  --vs-fg: var(--fc-fg);
+  --vs-fg-dim: #a3a3a3;
+  --vs-fg-faint: #737373;
+
+  /* One accent: heat. */
+  --vs-accent: var(--fc-heat);
+  --vs-accent-warm: var(--fc-heat-warm);
+  --vs-accent-ink: #ffffff;
+
+  --vs-signal: #42c366;
+  /* The 3D studio's measurement axes are data, not brand: three distinguishable hues. */
+  --vs-axis-x: #fa5d19;
+  --vs-axis-y: #42c366;
+  --vs-axis-z: #2a6dfb;
+
+  /* Lifecycle ramp (SRS §5.1) on the accent palette: escalates, waits, succeeds, fails. */
+  --vs-draft: #8f8f8f;
+  --vs-pending: #ecb730;
+  --vs-review: #9061ff;
+  --vs-approved: #42c366;
+  --vs-published: #7ce8b0;
+  --vs-rejected: #eb3424;
+  --vs-revision: var(--fc-heat);
+
+  /* Firecrawl's shape family: 8 for controls, 12 for cards, 16 for large surfaces. */
+  --vs-radius-sm: 8px;
+  --vs-radius: 12px;
+  --vs-radius-lg: 16px;
+
+  --vs-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -14px rgba(0, 0, 0, 0.7);
+  --vs-shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.55), 0 32px 64px -28px rgba(0, 0, 0, 0.85);
+
+  /* The standard transition from DESIGN.md, verbatim. */
+  --vs-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --vs-dur: 200ms;
+
+  --vs-gutter: clamp(16px, 4vw, 32px);
+  /* The storefront centres on a 1200px column; the console earns more width. */
+  --vs-max: 1200px;
+  --os-max: 1560px;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* One focus ring, everywhere: a 2px heat outline set off the surface by a 2px gap, which is the
+   two-layer ring from DESIGN.md expressed with outline-offset. Never removed without replacement. */
+::selection {
+  background: var(--fc-heat-40);
+  color: #ffffff;
+}
+
+/* Scrollbars: present, quiet, the same everywhere. A bright default scrollbar on a near-black page
+   is the loudest thing a browser does to a design. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fc-a-16) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--fc-a-12);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--fc-a-24);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+input[type='checkbox'] {
+  accent-color: var(--vs-accent);
+  width: 15px;
+  height: 15px;
+}
+
+/* --- the account cards on the sign-in screen -------------------------------------------------- */
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================================
+ * COMPONENT LAYER — the last few things a utility genuinely cannot express.
+ *
+ * Everything the product renders is now Tailwind utilities in the markup, with one vocabulary in
+ * `tailwind.config.ts`. Three cases cannot be a utility and live here as `@apply` composites:
+ *
+ *   1. **Rules about a *parent's* children.** `.vs-table th` and `.vs-spec-row` style descendants.
+ *      A utility sits on the element it styles, so a table cannot put padding on its own `<th>` from
+ *      its own class list. `@apply` is still Tailwind — it compiles to the same declarations the
+ *      utilities would have produced — it just lets one class reach its children.
+ *   2. **Arbitrary-value colours that must sit between two other utilities.** Never needed now: the
+ *      palette is fully named in the theme, including every tint of heat.
+ *   3. **Pseudo-element art.** The focus ring and the marquee dot. No utility emits `::before` with
+ *      content, and a ring drawn with a box-shadow is the one thing Tailwind cannot re-target per
+ *      element without a variant for every selector.
+ *
+ * Nothing here duplicates a utility. If Tailwind can say it, Tailwind says it.
+ * ========================================================================================== */
+
+@layer components {
+
+  /* ---- table ------------------------------------------------------------------------------
+   * The console renders ~1,000 rows of audit records; every one is plain `<table>` markup, and the
+   * cell geometry has to come from the table's own class. Row hover is on `tr` because these tables
+   * are always interactive: a row opens a record. */
+  .vs-table {
+    @apply w-full border-collapse text-[13.5px];
+  }
+
+  .vs-table th {
+    @apply whitespace-nowrap border-b border-hairline px-4 py-2.5 text-left font-mono text-[12px] font-normal tracking-[0.02em] text-ink-faint;
+  }
+
+  .vs-table td {
+    @apply border-b border-hairline px-4 py-3 align-middle tabular-nums;
+  }
+
+  .vs-table th:where(.vs-right),
+  .vs-table td:where(.vs-right) {
+    @apply text-right;
+  }
+
+  .vs-table tbody tr {
+    @apply transition-colors duration-150 ease-standard;
+  }
+
+  .vs-table tbody tr:hover {
+    @apply bg-veil-4;
+  }
+
+  .vs-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* ---- spec row ---------------------------------------------------------------------------
+   * Key on the left, value hard right, a hairline between rows. Used by the asset page, the review
+   * panel and the quick-look drawer, so it is defined once. */
+  .vs-spec-row {
+    @apply flex items-baseline justify-between gap-4 border-b border-hairline py-2.5 text-[13px] last:border-b-0;
+  }
+
+  .vs-spec-key {
+    @apply shrink-0 whitespace-nowrap text-ink-faint;
+  }
+
+  .vs-spec-value {
+    @apply min-w-0 break-words text-right tabular-nums text-ink;
+  }
+
+  /* ---- chip -------------------------------------------------------------------------------
+   * The pill, as a class as well as a component, because a handful of call sites sit inside a table
+   * cell where a wrapper element would break the cell's alignment. */
+  .chip {
+    @apply inline-flex items-center gap-[5px] whitespace-nowrap rounded-full border border-hairline-strong bg-veil-4 px-2.5 py-[3px] font-mono text-[11px] tracking-[0.02em] text-ink-dim;
+  }
+
+  .chip-live {
+    @apply border-state-published text-state-published;
+  }
+
+  /* ---- interactive tag ---------------------------------------------------------------------
+   * A tag that navigates, so it has hover and focus states a static chip does not need. */
+  .tag-interactive {
+    @apply inline-flex cursor-pointer items-center rounded-full border border-hairline bg-veil-4 px-2.5 py-1 text-[12px] text-ink-dim transition-colors duration-150 ease-standard hover:border-heat-40 hover:text-brand-warm;
+  }
+
+  /* ---- underlined link ---------------------------------------------------------------------
+   * An inline link inside a sentence, which a button style would swallow. */
+  .link-underline {
+    @apply border-b border-veil-16 pb-px text-ink transition-colors duration-150 ease-standard hover:border-brand hover:text-brand-warm;
+  }
+}
+
+/* ============================================================================================
+ * BASE — element defaults and the two pieces of pseudo-element art.
+ * ========================================================================================== */
+
+@layer base {
+
+  /*
+   * The skip link.
+   *
+   * Every page opens with a link that jumps past the header, because a keyboard user should not have
+   * to tab through a navigation to reach the content. Off-screen until focused — which is the one
+   * thing `sr-only` alone cannot do, since the link has to become visible the moment it has focus, or
+   * a sighted keyboard user is left with nothing on screen.
+   */
+  .vs-skip-link {
+    @apply sr-only;
+  }
+
+  .vs-skip-link:focus-visible {
+    @apply not-sr-only fixed left-4 top-4 z-[100] rounded-control border border-brand bg-base px-4 py-2 text-[13px] font-semibold text-ink;
+  }
+
+  /*
+   * The focus ring, in one place.
+   *
+   * `:focus-visible` rather than `:focus`, so a pointer click does not draw a ring on a button while
+   * a keyboard tab does. Every interactive element in the product is covered by this rule whether or
+   * not it came from `components/ui`, which is the point: a ring set per-component is a ring that is
+   * eventually missing from one component.
+   */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-base;
+  }
+
+  /*
+   * The select affordance.
+   *
+   * Shown only where the native arrow has been switched off (`appearance-none`), so a select that keeps
+   * the platform control does not end up with two arrows pointing different ways.
+   *
+   * This is a plain rule reading a token rather than a Tailwind class on each element, for the reason
+   * documented on `--vs-select-chevron`: a custom `bg-…` key passed through `cn()` is liable to be
+   * merged away along with the surface colour beside it, which is exactly what had happened here — every
+   * select in the product was rendering with no arrow *and* no background, falling back to the browser's
+   * default control grey.
+   */
+  select.appearance-none {
+    background-image: var(--vs-select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+  }
+}

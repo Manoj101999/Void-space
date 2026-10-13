@@ -1,0 +1,299 @@
+# ---------------------------------------------------------------------------
+# VOID·SPACE — full local stack (SRS §9.2)
+#
+#   pnpm dev:up    -> infra + edge, then migrations, RLS and contract deploy
+#   pnpm dev       -> api, worker, web in watch mode (natively, fast iteration)
+#
+# Profiles:
+#   infra : postgres, redis, ipfs, anvil, deploy-contracts  (always needed)
+#   edge  : nginx TLS termination + IPFS gateway cache      (always needed)
+#   app   : containerized api/worker/web (alternative to `pnpm dev`, §9.1)
+#   blender: headless Blender runner (heavy image, pulled on demand, FR-6.3)
+# ---------------------------------------------------------------------------
+name: void-space
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+x-dns-host-gateway: &host-gateway
+  # Lets the containerized edge reach api/web running natively via `pnpm dev`.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+services:
+  # ---------------------------------------------------------------- data tier
+  #
+  # Profiles, and why the data tier carries two.
+  #
+  # The api and worker services declare `depends_on: postgres/redis/ipfs`, and Compose refuses to
+  # build a project whose dependency sits in a profile it was not asked for — `--profile app up`
+  # used to fail with `service "worker" depends on undefined service "redis"`. Listing `app` here as
+  # well as `infra` says the true thing: the application tier cannot exist without its data tier, so
+  # asking for the application gets you the database it runs on. Selecting `infra` alone still starts
+  # only the data tier, which is what the local-development workflow wants.
+  #
+  # `deploy-contracts` deliberately does *not* join the `app` profile. It deploys a fresh registry and
+  # overwrites the shared state file on every run, so folding it into `up` would silently move the
+  # contract address (and orphan every licence already minted against the old one). Deploying stays an
+  # explicit step.
+  postgres:
+    <<: *default-restart
+    image: postgres:16-alpine
+    profiles: ["infra", "app"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voidspace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voidspace_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-voidspace}
+      # Deterministic sorting/collation for reproducible indexes and tests.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432" # dev only (§9.2)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Bootstrap roles (void_app / void_platform) run once on first init.
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-voidspace} -d ${POSTGRES_DB:-voidspace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    <<: *default-restart
+    image: redis:7-alpine
+    profiles: ["infra", "app"]
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379" # dev only (§9.2)
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ipfs:
+    <<: *default-restart
+    image: ipfs/kubo:latest
+    profiles: ["infra", "app"]
+    # Windows bind mounts may present this script with CRLF endings; normalize
+    # it inside the Linux container before BusyBox sh executes it.
+    entrypoint:
+      ["/bin/sh", "-c", "sed 's/\\r$//' /scripts/ipfs-entrypoint.sh > /tmp/ipfs-entrypoint.sh && exec /bin/sh /tmp/ipfs-entrypoint.sh"]
+    environment:
+      IPFS_PATH: /data/ipfs
+      IPFS_PROFILE: server
+    ports:
+      - "${IPFS_API_PORT:-5001}:5001" # dev only: worker talks to this directly
+      - "${IPFS_GATEWAY_PORT:-8080}:8080" # dev only: nginx proxies + caches this
+    volumes:
+      - ipfsdata:/data/ipfs
+      - ./docker/scripts:/scripts:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ipfs id >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # --------------------------------------------------------------- chain tier
+  anvil:
+    <<: *default-restart
+    image: ghcr.io/foundry-rs/foundry:stable
+    profiles: ["infra", "app"]
+    entrypoint: ["anvil"]
+    command:
+      ["--host", "0.0.0.0", "--port", "8545", "--chain-id", "${ANVIL_CHAIN_ID:-31337}"]
+    ports:
+      - "${ANVIL_PORT:-8545}:8545" # dev only: api/worker talk to it natively
+    # §3.9.1 — the chain is ephemeral by default (reset with the container).
+    # To persist state across restarts, uncomment the volume and the extra args:
+    #   volumes: [anvilstate:/data]
+    #   command: [..., "--state-interval", "5", "--dump-state", "/data/state.json", "--load-state", "/data/state.json"]
+    healthcheck:
+      # JSON-RPC eth_blockNumber is the documented readiness probe (§9.3).
+      test: ["CMD-SHELL", "cast block-number --rpc-url http://localhost:8545 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ------------------------------------------------------ edge / proxy tier
+  nginx:
+    <<: [*default-restart, *host-gateway]
+    image: nginx:alpine
+    profiles: ["edge"]
+    depends_on:
+      ipfs:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      EDGE_WEB_UPSTREAM: ${EDGE_WEB_UPSTREAM:-host.docker.internal:3000}
+      EDGE_API_UPSTREAM: ${EDGE_API_UPSTREAM:-host.docker.internal:4000}
+      EDGE_IPFS_GATEWAY_UPSTREAM: ${EDGE_IPFS_GATEWAY_UPSTREAM:-ipfs:8080}
+      TLS_CERT_PATH: ${TLS_CERT_PATH:-/etc/nginx/certs/void-space.crt}
+      TLS_KEY_PATH: ${TLS_KEY_PATH:-/etc/nginx/certs/void-space.key}
+    volumes:
+      - ./docker/nginx/templates:/etc/nginx/templates:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+      - ipfscache:/var/cache/nginx/ipfs
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ------------------------------------------------- contract deploy (one-shot)
+  deploy-contracts:
+    image: ghcr.io/foundry-rs/foundry:stable
+    profiles: ["infra"]
+    depends_on:
+      anvil:
+        condition: service_healthy
+    working_dir: /contracts
+    environment:
+      ANVIL_RPC_URL: http://anvil:8545
+      CONTRACT_STATE_PATH: /shared/contracts.json
+      PLATFORM_SIGNER_SEED: ${PLATFORM_SIGNER_SEED}
+    volumes:
+      - ./packages/contracts:/contracts
+      - contractsdata:/shared
+    entrypoint: ["/bin/sh", "/contracts/scripts/docker-deploy.sh"]
+    restart: "no"
+  # ------------------------------------------------------- application tier
+  # Containerized alternative to `pnpm dev` (§9.1). Enable with:
+  #   docker compose --profile app up -d
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://void_app:void_app_pw@postgres:5432/voidspace?schema=public
+      PLATFORM_DATABASE_URL: postgresql://void_platform:void_platform_pw@postgres:5432/voidspace?schema=public
+      REDIS_URL: redis://redis:6379
+      IPFS_API_URL: http://ipfs:5001
+      IPFS_GATEWAY_URL: http://ipfs:8080
+      ANVIL_RPC_URL: http://anvil:8545
+      CONTRACT_STATE_PATH: /shared/contracts.json
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-only-access-secret-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Must match the worker exactly: the API stages an upload, the worker picks that file up and
+      # pins it. Two different roots (or one container without the volume) means the pin worker
+      # never sees the bytes it was told to pin.
+      STAGING_DIR: /var/lib/void-space/uploads/staging
+      STAGING_MAX_BYTES: ${STAGING_MAX_BYTES:-5368709120}
+    volumes:
+      - contractsdata:/shared:ro
+      - uploads:/var/lib/void-space/uploads
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ipfs:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://void_app:void_app_pw@postgres:5432/voidspace?schema=public
+      REDIS_URL: redis://redis:6379
+      IPFS_API_URL: http://ipfs:5001
+      IPFS_GATEWAY_URL: http://ipfs:8080
+      ANVIL_RPC_URL: http://anvil:8545
+      CONTRACT_STATE_PATH: /shared/contracts.json
+      PLATFORM_SIGNER_SEED: ${PLATFORM_SIGNER_SEED}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      STAGING_DIR: /var/lib/void-space/uploads/staging
+      # FR-6.3 — where the headless Blender runner is, and the volume the two share. Unset (the
+      # default) means the processor records a labelled simulation instead of converting; see
+      # `apps/worker/src/processors/blender-optimize.ts`.
+      BLENDER_RUNNER_URL: ${BLENDER_RUNNER_URL:-}
+      BLENDER_JOB_DIR: /var/lib/void-space/blender-jobs
+    volumes:
+      - contractsdata:/shared:ro
+      - uploads:/var/lib/void-space/uploads
+      - blenderjobs:/var/lib/void-space/blender-jobs
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    profiles: ["app"]
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      # Server-side calls only; the browser talks to nginx (§3.1).
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      # The `/ipfs/[cid]` proxy route streams from Kubo. Through the edge, nginx serves and caches
+      # this path itself; this is what makes a model preview work when the app is opened directly on
+      # its own port instead.
+      IPFS_GATEWAY_URL: http://ipfs:8080
+    restart: unless-stopped
+
+  # --------------------------------------------- headless Blender (FR-6.3)
+  # Heavy image (~1 GB); pulled on demand only, never part of `pnpm dev:up`.
+  #
+  # Runs as a small HTTP service rather than a one-shot CLI, because the worker is what drives it
+  # and a worker container has no Docker socket — see the note in docker/blender.Dockerfile. It is
+  # not exposed on the host: the worker reaches it as `http://blender-runner:8090` over the Compose
+  # network, which is as far as it needs to travel.
+  blender-runner:
+    build:
+      context: .
+      dockerfile: docker/blender.Dockerfile
+    profiles: ["blender"]
+    environment:
+      BLENDER_JOB_DIR: /var/lib/void-space/blender-jobs
+      BLENDER_PORT: "8090"
+      # A large scene can legitimately take minutes; this is the ceiling, not the expectation.
+      BLENDER_TIMEOUT_SECONDS: ${BLENDER_TIMEOUT_SECONDS:-900}
+    volumes:
+      - uploads:/var/lib/void-space/uploads
+      # The shared job volume. Deliberately the *same path* as in the worker, though that is now a
+      # convenience rather than a requirement: the worker sends filenames and the runner resolves
+      # them against its own `BLENDER_JOB_DIR`, so the two mounts are free to differ. Aligning them
+      # means a path in a log line or an error message means the same file in both containers.
+      #
+      # The earlier version of this file required them to match, silently — the worker sent absolute
+      # paths and the runner rejected anything outside its own job dir, so `blenderjobs:/jobs` here
+      # against `/var/lib/void-space/blender-jobs` in the worker made every real conversion fail
+      # with a 400. The simulation path hid it, because a simulation never calls the runner.
+      - blenderjobs:/var/lib/void-space/blender-jobs
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  ipfsdata:
+  ipfscache:
+  contractsdata:
+  uploads:
+  blenderjobs:
+  # anvilstate:  # opt-in chain persistence (§3.9.1)

@@ -1,0 +1,14 @@
+{
+  "name": "@void-space/contracts",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AssetLicenseRegistry.sol — ERC-721 licensing & provenance contract for VOID·SPACE (SRS §3.9, §6.5).",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vv",
+    "test:gas": "forge test --gas-report",
+    "deploy": "bash scripts/docker-deploy.sh",
+    "export:abi": "node scripts/export-abi.mjs",
+    "typecheck": "echo \"@void-space/contracts: Solidity package — run the root 'pnpm contracts:build' instead\""
+  }
+}

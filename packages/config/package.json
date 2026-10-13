@@ -1,0 +1,19 @@
+{
+  "name": "@void-space/config",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["tailwind", "eslint"],
+  "exports": {
+    "./tailwind/preset": "./tailwind/preset.ts",
+    "./eslint/base": "./eslint/base.mjs"
+  },
+  "scripts": {
+    "typecheck": "echo \"@void-space/config: no TS sources to typecheck\"",
+    "build": "echo \"@void-space/config: nothing to build\""
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7"
+  }
+}

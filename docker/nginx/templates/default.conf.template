@@ -1,0 +1,143 @@
+# ---------------------------------------------------------------------------
+# VOID·SPACE edge (SRS §3.2, §6.6, §9.2, NFR-PERF.4)
+#
+# Rendered by the nginx image's envsubst on container start; every ${VAR} below
+# is substituted from the environment (see .env). nginx's own runtime variables
+# ($http_upgrade, $binary_remote_addr, ...) are preserved by that mechanism.
+#
+# Responsibilities:
+#   * TLS 1.2+ termination for the whole local stack
+#   * reverse proxy to the Next.js app and the Fastify API
+#   * edge rate limiting
+#   * IPFS gateway caching, so repeated 3D-preview loads never re-fetch from
+#     the local IPFS node (FR-8.3, NFR-PERF.4). The IPFS node itself is never
+#     exposed to the browser.
+# ---------------------------------------------------------------------------
+
+# --- Websocket upgrade helper (Next.js HMR + any streaming endpoints) ------
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+# --- IPFS gateway cache ----------------------------------------------------
+# 2 GB / 30 days: asset binaries are immutable (content-addressed), so they can
+# be cached aggressively; the cache key is the CID itself.
+proxy_cache_path /var/cache/nginx/ipfs
+                 levels=1:2
+                 keys_zone=ipfs_cache:32m
+                 max_size=2g
+                 inactive=30d
+                 use_temp_path=off;
+
+# --- Edge rate limits (FR-12.4 is enforced per API key inside the API; this is
+#     the coarser network-level guard) ---------------------------------------
+limit_req_zone $binary_remote_addr zone=edge_general:10m rate=100r/s;
+limit_req_zone $binary_remote_addr zone=edge_api:10m rate=50r/s;
+limit_req_status 429;
+
+# Upstreams: host.docker.internal:* when api/web run natively via `pnpm dev`,
+# or api:4000 / web:3000 when they run inside compose (profile "app").
+upstream void_space_web { server ${EDGE_WEB_UPSTREAM}; }
+upstream void_space_api { server ${EDGE_API_UPSTREAM}; }
+upstream void_space_ipfs_gateway { server ${EDGE_IPFS_GATEWAY_UPSTREAM}; }
+
+server {
+  listen 80;
+  listen [::]:80;
+  server_name localhost;
+
+  # Only the ACME-style health probe is served in the clear; everything else is
+  # redirected to TLS (§6.6).
+  location = /healthz {
+    access_log off;
+    add_header Content-Type text/plain;
+    return 200 "ok\n";
+  }
+
+  location / {
+    return 308 https://$host$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  http2 on;
+  server_name localhost;
+
+  ssl_certificate     ${TLS_CERT_PATH};
+  ssl_certificate_key ${TLS_KEY_PATH};
+  ssl_protocols       TLSv1.2 TLSv1.3;
+  ssl_ciphers         HIGH:!aNULL:!MD5;
+  ssl_session_cache   shared:SSL:10m;
+  ssl_session_timeout 10m;
+
+  # Local dev payloads can be large: 200 MB asset uploads (FR-3.1) plus form
+  # fields. Keep it slightly above the API's own ceiling.
+  client_max_body_size 220m;
+  client_body_timeout  300s;
+
+  # Security headers (OWASP ASVS baseline, §8.2).
+  add_header X-Content-Type-Options nosniff always;
+  add_header X-Frame-Options DENY always;
+  add_header Referrer-Policy strict-origin-when-cross-origin always;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+  # ---------------------------------------------------------------- API
+  location /api/ {
+    limit_req zone=edge_api burst=100 nodelay;
+    proxy_pass http://void_space_api;
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade           $http_upgrade;
+    proxy_set_header Connection        $connection_upgrade;
+
+    # Uploads and long-running job polls must not be cut short.
+    proxy_request_buffering off;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+  }
+
+  # ------------------------------------------- IPFS gateway (cached, FR-8.3)
+  location /ipfs/ {
+    limit_req zone=edge_general burst=200 nodelay;
+
+    proxy_pass http://void_space_ipfs_gateway/ipfs/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+
+    proxy_cache ipfs_cache;
+    proxy_cache_key "$request_uri";
+    proxy_cache_valid 200 206 30d;
+    proxy_cache_valid 404 1m;
+    proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+    proxy_cache_lock on;
+    proxy_cache_background_update on;
+    proxy_ignore_client_abort on;
+
+    # Range requests are how browsers/three.js stream large meshes.
+    proxy_set_header Range $http_range;
+    proxy_set_header If-Range $http_if_range;
+    add_header X-Cache-Status $upstream_cache_status always;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    add_header Accept-Ranges bytes always;
+  }
+
+  # ------------------------------------------------------- application (web)
+  location / {
+    limit_req zone=edge_general burst=200 nodelay;
+    proxy_pass http://void_space_web;
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade           $http_upgrade;   # Next.js HMR websocket
+    proxy_set_header Connection        $connection_upgrade;
+    proxy_read_timeout 300s;
+  }
+}

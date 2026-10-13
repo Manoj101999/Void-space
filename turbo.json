@@ -1,0 +1,40 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "globalDependencies": ["**/.env", "**/.env.*", "tsconfig.base.json"],
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "PLATFORM_DATABASE_URL",
+    "REDIS_URL",
+    "IPFS_API_URL",
+    "IPFS_GATEWAY_URL",
+    "ANVIL_RPC_URL",
+    "CONTRACT_ADDRESS",
+    "PLATFORM_SIGNER_SEED",
+    "JWT_ACCESS_SECRET",
+    "JWT_REFRESH_SECRET",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {},
+    "clean": {
+      "cache": false
+    }
+  }
+}

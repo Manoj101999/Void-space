@@ -1,0 +1,682 @@
+// ---------------------------------------------------------------------------
+// VOID·SPACE — Prisma schema (SRS §5.1 "Core Entities", §5.2 "Key Relationships")
+//
+// Multi-tenancy: shared database, shared schema, one `tenant_id` column on every
+// tenant-scoped table, enforced twice — application-layer checks *and* PostgreSQL
+// Row-Level Security (see prisma/sql/rls.sql, NFR-SEC.5, FR-1.6).
+//
+// Every table/column is mapped to snake_case so the physical schema matches the
+// naming used throughout the SRS (`tenant_id`, `ipfs_cid`, …).
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------- enums
+
+/// §5.1 Tenant.status + FR-1.5 suspend/reinstate.
+enum TenantStatus {
+  active
+  suspended
+}
+
+/// Platform-defined role set (§3.6). Not end-user editable in this release.
+enum RoleName {
+  SuperAdmin
+  TenantAdmin
+  Creator
+  Assessor
+  Developer
+  Viewer
+}
+
+/// Membership lifecycle for FR-1.2 (invite → accept) and FR-1.5 (suspension).
+enum UserStatus {
+  invited
+  active
+  suspended
+}
+
+/// §3.9.3: a managed wallet is tenant-owned (publisher signer), a linked wallet
+/// belongs to a user (SIWE identity / license recipient).
+enum WalletType {
+  managed
+  linked
+}
+
+/// §5.1 Asset.status — the lifecycle from Figure 4.
+enum AssetStatus {
+  draft
+  pending
+  needs_manual_review
+  approved
+  rejected
+  revision
+  published
+}
+
+/// §5.1 AssetVersion.pinStatus (FR-8.1/FR-8.5).
+enum PinStatus {
+  pending
+  pinning
+  pinned
+  failed
+}
+
+/// FR-4.2 decision kinds (named *Kind to avoid clashing with the shared DTO type).
+enum ReviewDecisionKind {
+  approved
+  rejected
+  revision
+}
+
+/// FR-9.5: revocation flags the record; it never deletes it.
+enum LicenseStatus {
+  active
+  revoked
+}
+
+/// GET /api/v1/jobs/{id} vocabulary (FR-6.5, §3.10).
+enum JobStatus {
+  queued
+  active
+  completed
+  failed
+  delayed
+}
+
+/// §3.10 queue names, mirrored offline for the polling API.
+enum JobQueue {
+  ai_enrichment
+  ipfs_pin
+  blender_optimize
+  chain_license
+  xr_publish
+  notify
+}
+
+// ------------------------------------------------------------- tenancy & auth
+
+/// §5.1 Tenant — the root of tenant isolation.
+model Tenant {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String       @db.VarChar(120)
+  slug            String       @unique @db.VarChar(60)
+  status          TenantStatus @default(active)
+  suspendedAt     DateTime?    @map("suspended_at")
+  suspendedReason String?      @map("suspended_reason") @db.VarChar(500)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  users           User[]
+  userRoles       UserRole[]
+  wallets         Wallet[]
+  assets          Asset[]
+  assetVersions   AssetVersion[]
+  aiSuggestions   AISuggestion[]
+  apiKeys         ApiKey[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  licenses        License[]
+  reviewDecisions ReviewDecision[]
+  reviewComments  ReviewComment[]
+  invites         Invite[]
+  webhooks        Webhook[]
+  jobs            Job[]
+  sessions        Session[]
+  settings        TenantSettings?
+
+  @@map("tenants")
+}
+
+/// §5.1 Role — fixed, platform-defined role set (§3.6).
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        RoleName @unique
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userRoles UserRole[]
+
+  @@map("roles")
+}
+
+/// §5.1 User — one row per (person, tenant) membership.
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @map("tenant_id") @db.Uuid
+  email         String     @db.VarChar(254)
+  fullName      String     @map("full_name") @db.VarChar(120)
+  passwordHash  String?    @map("password_hash")
+  googleId      String?    @map("google_id") @db.VarChar(120)
+  walletAddress String?    @map("wallet_address") @db.VarChar(42)
+  status        UserStatus @default(active)
+  lastLoginAt   DateTime?  @map("last_login_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  roles            UserRole[]
+  assetsCreated    Asset[]          @relation("AssetCreator")
+  versionsCreated  AssetVersion[]   @relation("VersionCreator")
+  decisions        ReviewDecision[] @relation("DecisionAssessor")
+  licensesApproved License[]        @relation("LicenseApprover")
+  comments         ReviewComment[]
+  apiKeys          ApiKey[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  wallets          Wallet[]
+  invitesSent      Invite[]         @relation("InviteSender")
+  sessions         Session[]
+
+  @@unique([tenantId, email])
+  @@index([email])
+  @@index([googleId])
+  @@map("users")
+}
+
+/// §5.1 UserRole — join table; one active role per user per tenant in this release.
+model UserRole {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+  assignedById String?  @map("assigned_by_id") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, roleId])
+  @@map("user_roles")
+}
+
+/// §5.1 Wallet — tenant-owned managed signer and/or user-linked wallet (§3.9.3).
+model Wallet {
+  id              String     @id @default(uuid()) @db.Uuid
+  tenantId        String     @map("tenant_id") @db.Uuid
+  userId          String?    @map("user_id") @db.Uuid
+  address         String     @db.VarChar(42)
+  type            WalletType
+  /// Derivation index under PLATFORM_SIGNER_SEED for managed wallets (§3.9.3).
+  /// The private key itself is never stored — only the derivation path.
+  derivationIndex Int?       @map("derivation_index")
+  label           String?    @db.VarChar(120)
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, address])
+  @@index([userId])
+  @@map("wallets")
+}
+
+/// FR-1.2 / UC-07 — email invitation carrying an initial role.
+model Invite {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  email       String    @db.VarChar(254)
+  role        RoleName
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  invitedById String?   @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy User?  @relation("InviteSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, email])
+  @@map("invites")
+}
+
+/// FR-14.3 — tenant-level defaults applied at upload time.
+model TenantSettings {
+  id                     String   @id @default(uuid()) @db.Uuid
+  tenantId               String   @unique @map("tenant_id") @db.Uuid
+  defaultPolycountBudget Int?     @map("default_polycount_budget")
+  requiredMetadataFields String[] @default([]) @map("required_metadata_fields")
+  allowedCategories      String[] @default([]) @map("allowed_categories")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
+}
+
+/// FR-11.4 / FR-14.2 — optional per-tenant outbound webhook.
+model Webhook {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  url       String   @db.VarChar(500)
+  secret    String   @db.VarChar(255)
+  events    String[] @default([])
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
+  @@map("webhooks")
+}
+
+// ---------------------------------------------------------------- asset domain
+
+/// §5.1 Asset — the asset record whose current version is reviewed and licensed.
+model Asset {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  creatorId        String      @map("creator_id") @db.Uuid
+  name             String      @db.VarChar(200)
+  /// FR-3.2/FR-7.5 — the human-facing summary. Written on upload, or promoted from an
+  /// accepted AI suggestion during review (see `AISuggestion.acceptedDescription`).
+  description      String?     @db.VarChar(4000)
+  category         String      @db.VarChar(60)
+  tags             String[]    @default([])
+  /// FR-3.2/FR-14.3 — free-form structured attributes. Validated against the tenant's
+  /// `requiredMetadataFields` on submit; stored as JSON so a tenant can extend it without a migration.
+  metadata         Json?
+  status           AssetStatus @default(draft)
+  currentVersionId String?     @map("current_version_id") @db.Uuid
+  /// FR-10.3 — EoN Reality module URL / manifest reference after XR publish.
+  manifestUrl      String?     @map("manifest_url") @db.VarChar(1000)
+  xrManifestRef    String?     @map("xr_manifest_ref") @db.VarChar(255)
+  publishedAt      DateTime?   @map("published_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator User   @relation("AssetCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+
+  currentVersion AssetVersion?    @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       AssetVersion[]   @relation("AssetVersions")
+  decisions      ReviewDecision[]
+  comments       ReviewComment[]
+  licenses       License[]
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, creatorId])
+  @@index([tenantId, name])
+  @@map("assets")
+}
+
+/// §5.1 AssetVersion — one row per upload; immutable once pinned and referenced
+/// by a review decision (FR-3.4, FR-9.4).
+model AssetVersion {
+  id                    String    @id @default(uuid()) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  assetId               String    @map("asset_id") @db.Uuid
+  versionNumber         Int       @map("version_number")
+  format                String    @db.VarChar(10)
+  sizeBytes             BigInt    @map("size_bytes")
+  polycount             Int?
+  vertices              Int?
+  materials             Int?
+  animations            Int?
+  textures              Int?
+  /// FR-8.1/FR-8.4 — the content-addressed fingerprint recorded per version.
+  ipfsCid               String?   @map("ipfs_cid") @db.VarChar(120)
+  pinStatus             PinStatus @default(pending) @map("pin_status")
+  sourceTool            String?   @map("source_tool") @db.VarChar(60)
+  /// NFR-COMP.1 — imported third-party assets retain their source license.
+  sourceLicense         String?   @map("source_license") @db.VarChar(120)
+  sourceAttribution     String?   @map("source_attribution") @db.VarChar(500)
+  sourceUrl             String?   @map("source_url") @db.VarChar(1000)
+  /// §6.3 mesh metadata parsed on ingest (polycount, bounds, …).
+  meshMetadata          Json?     @map("mesh_metadata")
+  /// FR-6.3 — set when this version is a headless-Blender derivative.
+  isDerivative          Boolean   @default(false) @map("is_derivative")
+  derivativeOfVersionId String?   @map("derivative_of_version_id") @db.Uuid
+  /// Local staging path before the pin job streams it to IPFS.
+  stagingPath           String?   @map("staging_path") @db.VarChar(500)
+  createdById           String?   @map("created_by_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset     Asset  @relation("AssetVersions", fields: [assetId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("VersionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  derivedFrom      AssetVersion?    @relation("VersionDerivatives", fields: [derivativeOfVersionId], references: [id], onDelete: SetNull)
+  derivatives      AssetVersion[]   @relation("VersionDerivatives")
+  aiSuggestion     AISuggestion?
+  decisions        ReviewDecision[]
+  licenses         License[]
+  currentForAssets Asset[]          @relation("CurrentVersion")
+
+  @@unique([assetId, versionNumber])
+  @@index([tenantId, pinStatus])
+  @@map("asset_versions")
+}
+
+/// §5.1 AISuggestion — AI output is persisted *separately* from Creator-authored
+/// metadata and never silently overwrites it (FR-7.4, FR-7.5).
+model AISuggestion {
+  id                   String    @id @default(uuid()) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  assetVersionId       String    @unique @map("asset_version_id") @db.Uuid
+  suggestedTags        String[]  @default([]) @map("suggested_tags")
+  suggestedDescription String    @map("suggested_description")
+  qualityFlags         String[]  @default([]) @map("quality_flags")
+  confidence           Float     @default(0)
+  /// FR-7.7 — model/prompt version and latency are recorded for auditability.
+  modelVersion         String    @map("model_version") @db.VarChar(80)
+  promptVersion        String    @map("prompt_version") @db.VarChar(40)
+  latencyMs            Int?      @map("latency_ms")
+  /// FR-7.3 — set when schema validation failed even after the stricter retry.
+  needsManualReview    Boolean   @default(false) @map("needs_manual_review")
+  rawResponse          Json?     @map("raw_response")
+  /// FR-7.5 — a one-click accept records what the Assessor adopted.
+  acceptedTags         String[]  @default([]) @map("accepted_tags")
+  acceptedDescription  String?   @map("accepted_description")
+  acceptedAt           DateTime? @map("accepted_at")
+  acceptedById         String?   @map("accepted_by_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetVersion AssetVersion @relation(fields: [assetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, needsManualReview])
+  @@map("ai_suggestions")
+}
+
+/// §5.1 ReviewDecision — one row per decision; full history retained (FR-4.2).
+model ReviewDecision {
+  id             String             @id @default(uuid()) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  assetId        String             @map("asset_id") @db.Uuid
+  assetVersionId String             @map("asset_version_id") @db.Uuid
+  assessorId     String             @map("assessor_id") @db.Uuid
+  decision       ReviewDecisionKind
+  comment        String?
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetVersion AssetVersion @relation(fields: [assetVersionId], references: [id], onDelete: Cascade)
+  assessor     User         @relation("DecisionAssessor", fields: [assessorId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, assetId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("review_decisions")
+}
+
+/// FR-4.6 — threaded comments on an asset's review history.
+/// (Not enumerated in §5.1, but required by FR-4.6; the SRS defers the detail to
+/// the companion SDD — see docs/VS-SDD-2.0-data-model.md.)
+model ReviewComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  authorId  String?  @map("author_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset   Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  author  User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  parent  ReviewComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies ReviewComment[] @relation("CommentThread")
+
+  @@index([tenantId, assetId, createdAt])
+  @@map("review_comments")
+}
+
+// ------------------------------------------------- licensing, ops & compliance
+
+/// §5.1 License — the off-chain mirror of the on-chain licence record, kept in
+/// sync via the contract's events (§3.9.4, FR-9.3, FR-9.6).
+model License {
+  id               String        @id @default(uuid()) @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  assetId          String        @map("asset_id") @db.Uuid
+  assetVersionId   String        @map("asset_version_id") @db.Uuid
+  approverId       String?       @map("approver_id") @db.Uuid
+  tokenId          BigInt        @map("token_id")
+  contractAddress  String        @map("contract_address") @db.VarChar(42)
+  /// Null when the token was adopted rather than minted by this system — e.g. a previous
+  /// attempt minted and crashed before writing the row. The chain is the authority on whether
+  /// a mint happened; inventing a hash to fill the column would poison every consumer of it.
+  txHash           String?       @map("tx_hash") @db.VarChar(66)
+  blockNumber      BigInt?       @map("block_number")
+  gasUsed          BigInt?       @map("gas_used")
+  /// §3.9.2 — the ipfs:// document reachable through tokenURI.
+  ipfsMetadataCid  String?       @map("ipfs_metadata_cid") @db.VarChar(120)
+  licenseTermsHash String        @map("license_terms_hash") @db.VarChar(66)
+  licenseType      String        @map("license_type") @db.VarChar(40)
+  licenseTerms     String?       @map("license_terms")
+  recipientAddress String?       @map("recipient_address") @db.VarChar(42)
+  status           LicenseStatus @default(active)
+  revokedReason    String?       @map("revoked_reason") @db.VarChar(500)
+  revokedAt        DateTime?     @map("revoked_at")
+  revokedTxHash    String?       @map("revoked_tx_hash") @db.VarChar(66)
+  mintedAt         DateTime      @default(now()) @map("minted_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetVersion AssetVersion @relation(fields: [assetVersionId], references: [id], onDelete: Cascade)
+  approver     User?        @relation("LicenseApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, tokenId])
+  @@index([tenantId, status])
+  @@index([tenantId, assetId])
+  @@map("licenses")
+}
+
+/// FR-2.3/FR-2.7 — server-side session records backing rotating refresh tokens.
+///
+/// (Not enumerated in §5.1; required by FR-2.3 "rotating refresh token" and
+/// FR-2.7 "invalidate all refresh tokens for a user upon password change, role
+/// change, or tenant suspension" — a stateless JWT alone cannot be revoked.
+/// See docs/VS-SDD-2.0-data-model.md §1.2.)
+model Session {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /// SHA-256 of the refresh token. The raw value exists only in the httpOnly
+  /// cookie, so a database leak does not yield usable sessions.
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(255)
+  userAgent     String?   @map("user_agent") @db.VarChar(300)
+  ipAddress     String?   @map("ip_address") @db.VarChar(64)
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason") @db.VarChar(120)
+  /// Rotation chain: the session this one replaced (reuse detection, §3.7).
+  replacedById  String?   @map("replaced_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  lastUsedAt    DateTime? @map("last_used_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// §6.1 "Public Catalog" — the anonymous read model behind the marketplace.
+///
+/// **Why a projection rather than a policy.** The marketplace must list published assets across
+/// *every* workspace, but §5.3 deliberately denies the platform role read access to tenant tables.
+/// Three ways to bridge that, and why this is the one:
+///
+///   1. Grant the platform role SELECT on `assets` — destroys the §5.3 boundary outright.
+///   2. Add a permissive RLS policy allowing `status = 'published'` — permissive policies are
+///      OR-ed, so inside a tenant context it would leak *other* tenants' published rows too.
+///      A restrictive policy keyed to a dedicated role would work, but then every joined table
+///      (`asset_versions`, `licenses`, `tenants`) needs the same treatment in lockstep.
+///   3. Write an explicit projection row at publish time (this).
+///
+/// The projection is the honest option: the public surface becomes an allow-list of columns that
+/// someone had to name deliberately, it needs no new privileges, and a takedown *deletes* the row —
+/// which is exactly the SRS's "the asset leaves the marketplace, the token stays on chain".
+///
+/// It carries no tenant RLS by design: these rows are public. `tenant_id` records provenance for
+/// operators; `tenant_name` is the snapshot shown to visitors.
+model PublicCatalogEntry {
+  id                 String    @id @default(uuid()) @db.Uuid
+  /// The public identifier in URLs (`/models/<assetId>`). Not a separate slug: names collide,
+  /// and a stable opaque id means a rename never breaks a shared link.
+  assetId            String    @unique @map("asset_id") @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  /// Snapshot at publish time, so the marketplace does not depend on tenant-table reads.
+  tenantName         String    @map("tenant_name") @db.VarChar(120)
+
+  name               String    @db.VarChar(200)
+  description        String?   @db.VarChar(4000)
+  category           String    @db.VarChar(60)
+  tags               String[]  @default([])
+
+  format             String    @db.VarChar(10)
+  sizeBytes          BigInt    @map("size_bytes")
+  polycount          Int?
+  vertices           Int?
+  materials          Int?
+  textures           Int?
+  animations         Int?
+  /// FR-8.1 — content address of the published version; also keys the rendered thumbnail.
+  ipfsCid            String    @map("ipfs_cid") @db.VarChar(120)
+
+  licenseType        String    @map("license_type") @db.VarChar(40)
+  licenseTerms       String?   @map("license_terms")
+  tokenId            BigInt?   @map("token_id")
+  contractAddress    String?   @map("contract_address") @db.VarChar(42)
+  txHash             String?   @map("tx_hash") @db.VarChar(66)
+  /// §3.9.2 — the ipfs:// licence document, so a visitor can verify without an account.
+  licenseMetadataCid String?   @map("license_metadata_cid") @db.VarChar(120)
+  xrManifestRef      String?   @map("xr_manifest_ref") @db.VarChar(255)
+
+  /// NFR-COMP.1 — imported third-party assets must keep their original licence visible.
+  sourceLicense      String?   @map("source_license") @db.VarChar(120)
+  sourceAttribution  String?   @map("source_attribution") @db.VarChar(500)
+  sourceUrl          String?   @map("source_url") @db.VarChar(1000)
+
+  publishedAt        DateTime  @map("published_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([publishedAt])
+  @@index([category, publishedAt])
+  @@index([tenantId])
+  @@map("public_catalog_entries")
+}
+
+/// §5.1 APIKey — only a salted hash is persisted; the raw key is shown once
+/// at creation (NFR-SEC.7, FR-12.3).
+///
+/// The key itself carries the tenant id (`vs_<label>_<tenantHex>_<secret>`) so an
+/// incoming key can be resolved to its tenant *before* any query runs. Without
+/// that, key authentication would need a cross-tenant lookup — exactly the access
+/// §5.3 denies the platform role.
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  label      String    @db.VarChar(80)
+  /// Short public prefix used to identify a key in the UI and in logs.
+  prefix     String    @db.VarChar(64)
+  hashedKey  String    @unique @map("hashed_key") @db.VarChar(255)
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([prefix])
+  @@index([tenantId, revokedAt])
+  @@map("api_keys")
+}
+
+/// §5.1 Notification — backs FR-11; optionally mirrored to an outbound webhook.
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String    @db.VarChar(60)
+  payload   Json      @default("{}")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, readAt])
+  @@index([tenantId, createdAt])
+  @@map("notifications")
+}
+
+/// §5.1 AuditLog — append-only (FR-13.3). UPDATE/DELETE are revoked from the
+/// runtime role at the database-permission level in prisma/sql/rls.sql.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  actorId     String?  @map("actor_id") @db.Uuid
+  /// Human-readable actor label captured at write time, so the trail survives
+  /// user deletion (also carries the Assessor reference for chain events).
+  actorLabel  String?  @map("actor_label") @db.VarChar(200)
+  action      String   @db.VarChar(60)
+  entityType  String   @map("entity_type") @db.VarChar(60)
+  /// Deliberately not a foreign key: the trail must outlive the entity.
+  entityId    String?  @map("entity_id") @db.VarChar(60)
+  beforeState Json?    @map("before_state")
+  afterState  Json?    @map("after_state")
+  /// FR-9.6 — chain interactions persist tx hash, block and gas for verifiability.
+  txHash      String?  @map("tx_hash") @db.VarChar(66)
+  blockNumber BigInt?  @map("block_number")
+  gasUsed     BigInt?  @map("gas_used")
+  ipfsCid     String?  @map("ipfs_cid") @db.VarChar(120)
+  requestId   String?  @map("request_id") @db.VarChar(64)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actor  User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@map("audit_logs")
+}
+
+/// §5.1 Job — durable off-Redis mirror of BullMQ job state for GET /jobs/{id}.
+/// The primary key doubles as the BullMQ jobId, so both sides share one id.
+model Job {
+  id          String    @id @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  queue       JobQueue
+  status      JobStatus @default(queued)
+  entityType  String?   @map("entity_type") @db.VarChar(60)
+  entityId    String?   @map("entity_id") @db.VarChar(60)
+  payload     Json      @default("{}")
+  result      Json?
+  error       String?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(1) @map("max_attempts")
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, status])
+  @@map("jobs")
+}

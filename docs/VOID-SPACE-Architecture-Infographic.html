@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOID·SPACE — Platform Architecture</title>
+<style>
+  /* ── RESET & BASE ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #f4f4f0;
+    color: #0f0f0e;
+    line-height: 1.5;
+  }
+
+  /* ── TOKENS ───────────────────────────────────────────────────────── */
+  :root {
+    --red:     #d81f26;
+    --red-dk:  #a31219;
+    --green:   #0f766e;
+    --blue:    #1d4ed8;
+    --gray:    #6b7280;
+    --gray-lt: #e5e7eb;
+    --gray-bg: #f4f4f0;
+    --ink:     #0f0f0e;
+    --white:   #ffffff;
+    --avax:    #e84142;
+    --page-w:  1080px;
+    --radius:  6px;
+    --shadow:  0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  /* ── PAGE SHELL ───────────────────────────────────────────────────── */
+  .page-wrap {
+    max-width: var(--page-w);
+    margin: 0 auto;
+    padding: 48px 32px 80px;
+  }
+
+  /* ── SECTION SPACING ─────────────────────────────────────────────── */
+  .section { margin-bottom: 56px; page-break-inside: avoid; }
+
+  /* ── COVER ────────────────────────────────────────────────────────── */
+  .cover {
+    background: var(--ink);
+    color: var(--white);
+    border-radius: var(--radius);
+    padding: 56px 48px 48px;
+    margin-bottom: 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    right: -60px; top: -60px;
+    width: 340px; height: 340px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(216,31,38,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cover-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 18px;
+  }
+  .cover-title {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin-bottom: 16px;
+  }
+  .cover-title span { color: var(--red); }
+  .cover-sub {
+    font-size: 15px;
+    color: rgba(255,255,255,0.62);
+    max-width: 560px;
+    line-height: 1.65;
+    margin-bottom: 36px;
+  }
+  .cover-pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .pipe-step {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .pipe-arrow {
+    color: var(--red);
+    font-size: 18px;
+    padding: 0 6px;
+    font-weight: 300;
+  }
+  .cover-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: rgba(255,255,255,0.1);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-top: 36px;
+  }
+  .cover-stat {
+    background: rgba(255,255,255,0.04);
+    padding: 20px 18px;
+    text-align: center;
+  }
+  .cover-stat-num {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: var(--white);
+    display: block;
+  }
+  .cover-stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.45);
+    margin-top: 4px;
+  }
+
+  /* ── SECTION HEADING ─────────────────────────────────────────────── */
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 22px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .sec-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--red);
+    min-width: 24px;
+  }
+  .sec-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .sec-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: var(--white);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .sec-badge.green { background: var(--green); }
+  .sec-badge.red   { background: var(--red); }
+
+  /* ── CARDS ────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 10px;
+  }
+
+  /* ── GRID LAYOUTS ─────────────────────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  .col-span-2 { grid-column: span 2; }
+
+  /* ── ARCH DIAGRAM ─────────────────────────────────────────────────── */
+  .arch-diagram {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ── LAYER BLOCK ─────────────────────────────────────────────────── */
+  .layer-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 0;
+    margin-bottom: 4px;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .layer-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 8px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: center;
+    writing-mode: horizontal-tb;
+    color: var(--white);
+    line-height: 1.3;
+  }
+  .layer-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    flex-wrap: wrap;
+  }
+  .layer-node {
+    background: var(--white);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .layer-arrow {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4px 0;
+    color: var(--gray);
+    font-size: 18px;
+  }
+
+  /* ── LIFECYCLE STATE MACHINE ────────────────────────────────────────── */
+  .lifecycle-wrap {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+  .state-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .state-node {
+    border-radius: 5px;
+    padding: 10px 6px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1.35;
+    border: 2px solid transparent;
+  }
+  .state-node.draft       { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+  .state-node.pending     { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+  .state-node.manual      { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+  .state-node.approved    { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+  .state-node.revision    { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+  .state-node.rejected    { background: #fce7f3; border-color: #f9a8d4; color: #831843; }
+  .state-node.published   { background: #0f766e; border-color: #0f766e; color: #fff; }
+
+  .state-transitions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .transition-rule {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 11px;
+    padding: 8px 10px;
+    background: var(--gray-bg);
+    border-radius: 4px;
+    border-left: 3px solid var(--gray-lt);
+  }
+  .transition-rule.warn { border-left-color: var(--red); }
+  .transition-rule.ok   { border-left-color: var(--green); }
+  .rule-arrow { color: var(--gray); flex-shrink: 0; font-weight: 700; }
+
+  /* ── INGESTION PIPELINE ─────────────────────────────────────────── */
+  .pipeline-swim {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .swim-lane {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    border-bottom: 1px solid var(--gray-lt);
+  }
+  .swim-lane:last-child { border-bottom: none; }
+  .swim-actor {
+    padding: 12px 10px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .swim-steps {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .swim-step {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 5px 9px;
+    border-radius: 4px;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  .swim-arr { color: var(--gray); font-size: 13px; flex-shrink: 0; }
+
+  /* ── JOB TABLE ────────────────────────────────────────────────────── */
+  .job-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .job-table th {
+    background: var(--ink);
+    color: var(--white);
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .job-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--gray-lt);
+    vertical-align: middle;
+  }
+  .job-table tr:last-child td { border-bottom: none; }
+  .job-table tr:nth-child(odd) td { background: #fafafa; }
+  .queue-pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .pill-ai    { background: #ede9fe; color: #5b21b6; }
+  .pill-ipfs  { background: #d1fae5; color: #065f46; }
+  .pill-chain { background: #fee2e2; color: #991b1b; }
+  .pill-xr    { background: #dbeafe; color: #1e40af; }
+  .pill-blend { background: #fef3c7; color: #92400e; }
+  .pill-notif { background: #f3f4f6; color: #374151; }
+
+  /* ── RBAC TABLE ───────────────────────────────────────────────────── */
+  .rbac-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .rbac-table th {
+    background: var(--ink);
+    color: var(--white);
+    padding: 8px 10px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .rbac-table th:first-child { text-align: left; }
+  .rbac-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--gray-lt);
+    text-align: center;
+    font-size: 10px;
+    vertical-align: middle;
+  }
+  .rbac-table td:first-child { text-align: left; font-weight: 500; }
+  .rbac-table tr:nth-child(odd) td { background: #fafafa; }
+  .yes { color: var(--green); font-weight: 800; font-size: 13px; }
+  .no  { color: #d1d5db; font-weight: 800; font-size: 13px; }
+
+  /* ── DATA MODEL ───────────────────────────────────────────────────── */
+  .entity-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .entity-box {
+    background: var(--white);
+    border: 1.5px solid var(--gray-lt);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .entity-head {
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .entity-icon { font-size: 13px; }
+  .entity-fields { padding: 10px 12px; }
+  .entity-field {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 10px;
+    border-bottom: 1px solid var(--gray-lt);
+    gap: 8px;
+  }
+  .entity-field:last-child { border-bottom: none; }
+  .field-name { font-weight: 500; color: var(--ink); font-family: 'Courier New', monospace; }
+  .field-type { color: var(--gray); font-family: 'Courier New', monospace; font-size: 9px; }
+  .field-pk  { color: var(--red); font-weight: 700; font-family: 'Courier New', monospace; font-size: 9px; }
+  .field-fk  { color: var(--blue); font-weight: 600; font-family: 'Courier New', monospace; font-size: 9px; }
+
+  /* ── BLOCKCHAIN ───────────────────────────────────────────────────── */
+  .chain-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .chain-node {
+    flex: 1;
+    padding: 20px 16px;
+    text-align: center;
+    border-right: 1px solid var(--gray-lt);
+  }
+  .chain-node:last-child { border-right: none; }
+  .chain-icon { font-size: 22px; margin-bottom: 8px; display: block; }
+  .chain-name {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .chain-desc { font-size: 10px; color: var(--gray); line-height: 1.5; }
+  .chain-arr-wrap {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    color: var(--gray);
+    font-size: 20px;
+  }
+  .chain-signing {
+    background: #fff5f5;
+    border: 2px solid var(--red);
+  }
+  .chain-signing .chain-name { color: var(--red); }
+
+  /* ── SECURITY GRID ────────────────────────────────────────────────── */
+  .sec-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .sec-table th {
+    background: var(--ink);
+    color: var(--white);
+    padding: 8px 12px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: left;
+  }
+  .sec-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--gray-lt);
+    vertical-align: top;
+    font-size: 11px;
+  }
+  .sec-table tr:nth-child(odd) td { background: #fafafa; }
+  .sec-table tr:last-child td { border-bottom: none; }
+  .sec-concern { font-weight: 700; color: var(--ink); }
+  .shield { color: var(--green); font-weight: 700; margin-right: 4px; }
+
+  /* ── ROADMAP ──────────────────────────────────────────────────────── */
+  .roadmap-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .roadmap-col {
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .roadmap-col-head {
+    padding: 14px 16px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--white);
+  }
+  .roadmap-col-body { background: var(--white); border: 1px solid var(--gray-lt); border-top: none; padding: 14px 16px; }
+  .roadmap-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--gray-lt);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .roadmap-item:last-child { border-bottom: none; }
+  .roadmap-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; }
+
+  /* ── TEST COVERAGE ────────────────────────────────────────────────── */
+  .test-bars { display: flex; flex-direction: column; gap: 8px; }
+  .test-row { display: grid; grid-template-columns: 140px 1fr 40px; align-items: center; gap: 10px; font-size: 11px; }
+  .test-bar-track { background: var(--gray-lt); border-radius: 100px; height: 8px; overflow: hidden; }
+  .test-bar-fill { height: 100%; border-radius: 100px; background: var(--green); }
+  .test-count { font-weight: 700; color: var(--ink); text-align: right; }
+
+  /* ── API SURFACE ──────────────────────────────────────────────────── */
+  .api-modules {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .api-module {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+  }
+  .api-mod-name {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .api-ops-count {
+    font-size: 9px;
+    font-weight: 700;
+    background: var(--ink);
+    color: var(--white);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .api-endpoints { font-size: 9px; color: var(--gray); line-height: 1.7; font-family: 'Courier New', monospace; }
+
+  /* ── CALLOUT BOXES ────────────────────────────────────────────────── */
+  .callout {
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    font-size: 11px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .callout-icon { font-size: 16px; flex-shrink: 0; }
+  .callout.note  { background: #eff6ff; border-left: 3px solid #3b82f6; }
+  .callout.warn  { background: #fff7ed; border-left: 3px solid #f97316; }
+  .callout.good  { background: #f0fdf4; border-left: 3px solid var(--green); }
+  .callout.crit  { background: #fff5f5; border-left: 3px solid var(--red); }
+  .callout strong { font-weight: 700; }
+
+  /* ── NFR GRID ─────────────────────────────────────────────────────── */
+  .nfr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .nfr-item {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+    border-left: 3px solid var(--green);
+  }
+  .nfr-code { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; color: var(--green); text-transform: uppercase; margin-bottom: 4px; font-family: 'Courier New', monospace; }
+  .nfr-text { font-size: 11px; color: var(--ink); line-height: 1.5; }
+  .nfr-mech { font-size: 10px; color: var(--gray); margin-top: 4px; line-height: 1.4; }
+
+  /* ── DEPLOYMENT TOPOLOGY ─────────────────────────────────────────── */
+  .topo-wrap {
+    background: var(--white);
+    border: 1px solid var(--gray-lt);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+  .topo-profile {
+    margin-bottom: 16px;
+  }
+  .topo-profile-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+  .topo-nodes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .topo-node {
+    padding: 8px 14px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    line-height: 1.3;
+    text-align: center;
+  }
+  .topo-connector {
+    text-align: center;
+    color: var(--gray);
+    font-size: 13px;
+    margin: 4px 0;
+    letter-spacing: 2px;
+  }
+
+  /* ── PRINT ────────────────────────────────────────────────────────── */
+  @media print {
+    body { background: #fff; font-size: 11px; }
+    .page-wrap { padding: 20px 24px 40px; max-width: 100%; }
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section { page-break-inside: avoid; margin-bottom: 36px; }
+    .cover-stats, .grid-2, .grid-3, .grid-4, .entity-grid, .roadmap-cols, .api-modules, .nfr-grid,
+    .state-grid, .state-transitions, .topo-nodes { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- ══════════════════════════════════════════════
+       COVER
+       ══════════════════════════════════════════════ -->
+  <div class="cover">
+    <div class="cover-eyebrow">Platform Architecture · v2.0</div>
+    <h1 class="cover-title">VOID<span>·</span>SPACE</h1>
+    <p class="cover-sub">
+      Multi-tenant 3D/XR asset lifecycle platform — from raw upload to governed, content-addressed, on-chain licensed assets delivered to XR consumers.
+    </p>
+    <p class="cover-sub" style="font-size:12px;opacity:.75;max-width:62ch;margin-top:14px;">
+      <strong>An exported snapshot.</strong> The living documents are
+      <code>docs/architecture.md</code> and <code>docs/FR-traceability.md</code>. The figures on this
+      page were copied from them by hand and had drifted before this export was corrected &mdash; check
+      <code>architecture.md</code> before quoting a number.
+    </p>
+
+    <div class="cover-pipeline">
+      <div class="pipe-step">Upload</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">AI Classify</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">Human Review</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">IPFS Pin</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">ERC-721 Mint</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">XR Delivery</div>
+    </div>
+
+    <div class="cover-stats">
+      <div class="cover-stat">
+        <span class="cover-stat-num">10</span>
+        <div class="cover-stat-label">Containers</div>
+      </div>
+      <div class="cover-stat">
+        <span class="cover-stat-num">275</span>
+        <div class="cover-stat-label">Tests</div>
+      </div>
+      <div class="cover-stat">
+        <span class="cover-stat-num">69</span>
+        <div class="cover-stat-label">API Operations</div>
+      </div>
+      <div class="cover-stat">
+        <span class="cover-stat-num">18</span>
+        <div class="cover-stat-label">RLS Tables</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §1 FOUR DESIGN PRINCIPLES
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§1</span>
+      <h2 class="sec-title">Four Core Design Principles</h2>
+      <span class="sec-badge green">Executive Summary</span>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">① Exactly One Writer Per Boundary</div>
+        <p style="font-size:12px;line-height:1.6;color:#374151;">Only the <strong>API</strong> writes domain state. Only the <strong>Worker</strong> holds a signing key. Only <strong>Postgres</strong> holds the system of record. Nothing else may become a second source of truth.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">② Tenant Isolation at the Database</div>
+        <p style="font-size:12px;line-height:1.6;color:#374151;">Row-level security is forced on <strong>18 tables</strong>. The runtime role physically cannot read across tenants — not by convention, by grant. A misconfigured connection fails at boot.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">③ Slow Work Never Blocks a Request</div>
+        <p style="font-size:12px;line-height:1.6;color:#374151;">AI classification, IPFS pinning, Blender conversion, chain transactions and notifications are all <strong>queued jobs</strong> with documented retry policies — never inline in the request.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">④ Trust Is Verifiable</div>
+        <p style="font-size:12px;line-height:1.6;color:#374151;">Content is addressed by <strong>hash</strong> (CID). Licences are <strong>on-chain</strong> ERC-721 tokens. Every state change is in an <strong>append-only audit ledger</strong> that records chain receipts alongside application events.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §2 SYSTEM ARCHITECTURE
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§2</span>
+      <h2 class="sec-title">System Architecture</h2>
+    </div>
+
+    <div class="arch-diagram">
+
+      <!-- Actors -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:9px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">Actors</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div style="background:#fff5f5;border:1.5px solid #fca5a5;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#991b1b;">Creator<br><span style="font-weight:400;color:#9ca3af;">upload · draft · submit</span></div>
+          <div style="background:#fff5f5;border:1.5px solid #fca5a5;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#991b1b;">Assessor<br><span style="font-weight:400;color:#9ca3af;">review · approve · publish</span></div>
+          <div style="background:#fff5f5;border:1.5px solid #fca5a5;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#991b1b;">Tenant Admin<br><span style="font-weight:400;color:#9ca3af;">members · roles · settings</span></div>
+          <div style="background:#fff5f5;border:1.5px solid #fca5a5;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#991b1b;">Developer<br><span style="font-weight:400;color:#9ca3af;">REST API · scoped keys</span></div>
+          <div style="background:#fff5f5;border:1.5px solid #fca5a5;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#991b1b;">Viewer / SuperAdmin<br><span style="font-weight:400;color:#9ca3af;">catalogue · platform</span></div>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="layer-arrow" style="margin-bottom:4px;">↓ HTTPS ↓</div>
+
+      <!-- Edge -->
+      <div class="layer-row" style="margin-bottom:12px;">
+        <div class="layer-label" style="background:#0f0f0e;">EDGE<br>TLS · Rate</div>
+        <div class="layer-content" style="background:#1a1a19;">
+          <div class="layer-node" style="background:#2d2d2b;color:#fff;border-color:rgba(255,255,255,0.15);">
+            <div style="font-size:10px;font-weight:700;">nginx</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">TLS 1.2+ · HSTS · rate limits<br>routes / &nbsp; /api &nbsp; /ipfs</div>
+          </div>
+          <div style="color:#555;font-size:13px;">→</div>
+          <div class="layer-node" style="background:#2d2d2b;color:#fff;border-color:rgba(255,255,255,0.15);">
+            <div style="font-size:10px;font-weight:700;">Cached IPFS Gateway</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">repeat reads served from cache</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="layer-arrow" style="margin-bottom:4px;">↓ proxy ↓</div>
+
+      <!-- App Tier -->
+      <div class="layer-row" style="margin-bottom:12px;">
+        <div class="layer-label" style="background:#d81f26;">APP<br>Tier</div>
+        <div class="layer-content" style="background:#fff8f8;border:1px solid #fca5a5;">
+          <div class="layer-node" style="background:#fff;border-color:#fca5a5;color:#0f0f0e;">
+            <div style="font-size:10px;font-weight:700;">Operations Console</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">Next.js 14 · React Query<br>library · review · marketplace</div>
+          </div>
+          <div style="color:#d81f26;font-size:13px;font-weight:700;">→ REST /api/v1 →</div>
+          <div class="layer-node" style="background:#fff;border-color:#fca5a5;color:#0f0f0e;">
+            <div style="font-size:10px;font-weight:700;">Fastify API</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">single writer · authN · RBAC<br>tenancy · audit</div>
+          </div>
+          <div style="color:#999;font-size:13px;">- - enqueue - -→</div>
+          <div class="layer-node" style="background:#fff;border-color:#fca5a5;color:#0f0f0e;">
+            <div style="font-size:10px;font-weight:700;">Worker Tier</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:2px;">ipfs-pin · ai-enrichment · blender<br>chain-license · xr-publish · notify<br><strong style="color:#d81f26;">only holder of signing key</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center;margin-bottom:4px;">
+        <div class="layer-arrow">↓ reads + writes ↓</div>
+        <div class="layer-arrow">↓ pin · classify · convert · <strong style="color:#d81f26;">mint</strong> ↓</div>
+      </div>
+
+      <!-- Data + Integrations -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="layer-row" style="margin-bottom:0;">
+          <div class="layer-label" style="background:#1d4ed8;">DATA<br>Backing</div>
+          <div class="layer-content" style="background:#eff6ff;border:1px solid #93c5fd;flex-wrap:wrap;gap:8px;">
+            <div class="layer-node" style="background:#fff;border-color:#93c5fd;">
+              <div style="font-size:10px;font-weight:700;">PostgreSQL 16</div>
+              <div style="font-size:9px;color:#9ca3af;">20 tables · RLS on 18<br>append-only audit</div>
+            </div>
+            <div class="layer-node" style="background:#fff;border-color:#93c5fd;">
+              <div style="font-size:10px;font-weight:700;">Redis 7</div>
+              <div style="font-size:9px;color:#9ca3af;">6 BullMQ queues<br>retry policies</div>
+            </div>
+            <div class="layer-node" style="background:#fff;border-color:#93c5fd;">
+              <div style="font-size:10px;font-weight:700;">IPFS Kubo</div>
+              <div style="font-size:9px;color:#9ca3af;">content addressed<br>by hash</div>
+            </div>
+          </div>
+        </div>
+        <div class="layer-row" style="margin-bottom:0;">
+          <div class="layer-label" style="background:#6b7280;">EXT<br>Integrations</div>
+          <div class="layer-content" style="background:#f9fafb;border:1px dashed #d1d5db;flex-wrap:wrap;gap:8px;">
+            <div class="layer-node" style="background:#fff;border-color:#d1d5db;border-style:dashed;">
+              <div style="font-size:10px;font-weight:700;">Anthropic Claude</div>
+              <div style="font-size:9px;color:#9ca3af;">classification + desc</div>
+            </div>
+            <div class="layer-node" style="background:#fff;border-color:#d1d5db;border-style:dashed;">
+              <div style="font-size:10px;font-weight:700;">Blender headless</div>
+              <div style="font-size:9px;color:#9ca3af;">convert to GLB</div>
+            </div>
+            <div class="layer-node" style="background:#fff5f5;border-color:#fca5a5;border-style:solid;border-width:2px;">
+              <div style="font-size:10px;font-weight:700;color:#d81f26;">Licence Chain</div>
+              <div style="font-size:9px;color:#9ca3af;">ERC-721 · Avalanche<br>AssetLicenseRegistry</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;padding:10px 12px;background:#f9fafb;border-radius:4px;font-size:10px;color:#6b7280;line-height:1.6;">
+        <strong style="color:#0f0f0e;">How to read:</strong> Solid arrows = synchronous. Dashed arrows = async queue hand-off. The <strong style="color:#d81f26;">heavy red path</strong> is licensing — the only path reaching the blockchain, the only one run by the process that holds a private key.
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §3 LAYERED RESPONSIBILITIES
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§3</span>
+      <h2 class="sec-title">Layered Responsibilities</h2>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr>
+            <th style="background:#0f0f0e;color:#fff;padding:9px 14px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;width:14%;">Layer</th>
+            <th style="background:#0f0f0e;color:#fff;padding:9px 14px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;width:24%;">Owns</th>
+            <th style="background:#0f0f0e;color:#fff;padding:9px 14px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;width:30%;">Must Never</th>
+            <th style="background:#0f0f0e;color:#fff;padding:9px 14px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">Enforced By</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#1d4ed8;">Client</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">Presentation, optimistic UI, 3D preview</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;color:#d81f26;">Decide authorisation, hold secrets, access Postgres/IPFS/chain directly</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-size:10px;font-family:monospace;color:#6b7280;">All data via apps/web/src/lib/api.ts</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#0f0f0e;">Edge</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">TLS, routing, rate limits, gateway cache</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;color:#d81f26;">Contain business rules</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-size:10px;font-family:monospace;color:#6b7280;">docker/nginx/templates/default.conf.template</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#d81f26;">API</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">Authorisation, tenancy, validation, domain state, audit</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;color:#d81f26;">Hold a chain private key, run long jobs inline</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-size:10px;color:#6b7280;">No signing key in API env; slow ops enqueued</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#991b1b;">Worker</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">AI calls, IPFS pinning, Blender, chain transactions, notifications</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;color:#d81f26;">Serve HTTP, own authorisation decisions</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-size:10px;color:#6b7280;">Separate process; only it receives PLATFORM_SIGNER_SEED</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#1d4ed8;">Data</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">System of record, tenant isolation, append-only history</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;color:#d81f26;">Bypassed without tenant context</td>
+            <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;font-size:10px;color:#6b7280;">RLS FORCE + void_app role + assertRlsEnforced()</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td style="padding:9px 14px;font-weight:700;color:#e84142;">Chain</td>
+            <td style="padding:9px 14px;">Immutable licence record and provenance</td>
+            <td style="padding:9px 14px;color:#d81f26;">Store mutable business state</td>
+            <td style="padding:9px 14px;font-size:10px;color:#6b7280;">Only licence identity, terms hash, metadata CID written on-chain</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §4 REQUEST PIPELINE & AUTHORISATION
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§4</span>
+      <h2 class="sec-title">Request Pipeline &amp; Authorisation (8 Stages)</h2>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="display:grid;grid-template-columns:repeat(8,1fr);">
+        <!-- Step labels -->
+        <div style="background:#0f0f0e;padding:10px 6px;text-align:center;border-right:1px solid #1a1a19;">
+          <div style="font-size:8px;font-weight:800;color:#d81f26;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Step 1</div>
+          <div style="font-size:9px;font-weight:600;color:#fff;line-height:1.3;">HTTPS Request</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">Browser → nginx</div>
+        </div>
+        <div style="background:#0f0f0e;padding:10px 6px;text-align:center;border-right:1px solid #1a1a19;">
+          <div style="font-size:8px;font-weight:800;color:#d81f26;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Step 2</div>
+          <div style="font-size:9px;font-weight:600;color:#fff;line-height:1.3;">TLS Terminate + Proxy</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">nginx → Fastify</div>
+        </div>
+        <div style="background:#0f0f0e;padding:10px 6px;text-align:center;border-right:1px solid #1a1a19;">
+          <div style="font-size:8px;font-weight:800;color:#d81f26;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Step 3</div>
+          <div style="font-size:9px;font-weight:600;color:#fff;line-height:1.3;">Authenticate</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">cookie / bearer / API key</div>
+        </div>
+        <div style="background:#1a1a19;padding:10px 6px;text-align:center;border-right:1px solid #222;">
+          <div style="font-size:8px;font-weight:800;color:#fca5a5;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">401 path</div>
+          <div style="font-size:9px;font-weight:600;color:#fca5a5;line-height:1.3;">UNAUTHENTICATED</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">fail closed</div>
+        </div>
+        <div style="background:#0f0f0e;padding:10px 6px;text-align:center;border-right:1px solid #1a1a19;">
+          <div style="font-size:8px;font-weight:800;color:#d81f26;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Step 4</div>
+          <div style="font-size:9px;font-weight:600;color:#fff;line-height:1.3;">Resolve Tenant</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">token / X-Tenant-Id</div>
+        </div>
+        <div style="background:#1a1a19;padding:10px 6px;text-align:center;border-right:1px solid #222;">
+          <div style="font-size:8px;font-weight:800;color:#fca5a5;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">403 path</div>
+          <div style="font-size:9px;font-weight:600;color:#fca5a5;line-height:1.3;">TENANT_FORBIDDEN</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">not a member</div>
+        </div>
+        <div style="background:#0f0f0e;padding:10px 6px;text-align:center;border-right:1px solid #1a1a19;">
+          <div style="font-size:8px;font-weight:800;color:#d81f26;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Step 5</div>
+          <div style="font-size:9px;font-weight:600;color:#fff;line-height:1.3;">Check Permission</div>
+          <div style="font-size:8px;color:#6b7280;margin-top:4px;">RBAC matrix</div>
+        </div>
+        <div style="background:#065f46;padding:10px 6px;text-align:center;">
+          <div style="font-size:8px;font-weight:800;color:#6ee7b7;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Step 6–8</div>
+          <div style="font-size:9px;font-weight:600;color:#fff;line-height:1.3;">Handler → Audit → Response</div>
+          <div style="font-size:8px;color:#a7f3d0;margin-top:4px;">withTenant transaction</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;" class="grid-2">
+      <div class="callout note">
+        <span class="callout-icon">🔄</span>
+        <div><strong>Identity re-resolved on every request.</strong> A role change, removal or suspension takes effect on the caller's next request — not at token expiry.</div>
+      </div>
+      <div class="callout good">
+        <span class="callout-icon">🔒</span>
+        <div><strong>Tenant context before any handler.</strong> The handler executes inside a <code>withTenant</code> transaction. A handler cannot "forget" tenancy.</div>
+      </div>
+    </div>
+
+    <!-- Auth methods -->
+    <div style="margin-top:16px;" class="card">
+      <div class="card-title">Authentication Methods</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr>
+            <th style="background:#f3f4f6;color:#374151;padding:7px 10px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">Method</th>
+            <th style="background:#f3f4f6;color:#374151;padding:7px 10px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">Endpoints</th>
+            <th style="background:#f3f4f6;color:#374151;padding:7px 10px;text-align:left;font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;">Email + Password</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:10px;">POST /auth/login</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#6b7280;">bcrypt cost 12; HttpOnly cookies; never in response body</td></tr>
+          <tr style="background:#fafafa;"><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;">Refresh Rotation</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:10px;">POST /auth/refresh</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Rotating tokens; reuse detection revokes the whole session family</td></tr>
+          <tr><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;">Google OAuth 2.0</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:10px;">/auth/google/start</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#6b7280;">First sign-in provisions the account; subject to tenant policy</td></tr>
+          <tr style="background:#fafafa;"><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;">SIWE (Wallet)</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:10px;">/auth/siwe/verify</td><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#6b7280;">EIP-4361 message; nonce single-use with TTL</td></tr>
+          <tr><td style="padding:7px 10px;font-weight:600;">API Keys</td><td style="padding:7px 10px;font-family:monospace;font-size:10px;">POST /auth/token</td><td style="padding:7px 10px;color:#6b7280;">Stored hashed; scoped to owning tenant and user; prefix <code>vs_…</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §5 MULTI-TENANCY & RLS
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§5</span>
+      <h2 class="sec-title">Multi-Tenancy &amp; Row-Level Security</h2>
+      <span class="sec-badge green">Safety Critical</span>
+    </div>
+
+    <div class="callout crit">
+      <span class="callout-icon">🔐</span>
+      <div><strong>Tenant isolation is the platform's most safety-critical property.</strong> A leak would expose one customer's unreleased product models to another. It is enforced in the database, not trusted to application code.</div>
+    </div>
+
+    <div class="grid-2" style="margin-top:14px;">
+      <!-- withTenant flow -->
+      <div class="card">
+        <div class="card-title">withTenant Transaction Flow</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+          <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:11px;display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:700;color:#065f46;">1</span> BEGIN transaction
+          </div>
+          <div style="text-align:center;color:#9ca3af;font-size:12px;">↓</div>
+          <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:11px;display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:700;color:#065f46;">2</span> <code>SET LOCAL app.current_tenant_id = 'uuid'</code>
+          </div>
+          <div style="text-align:center;color:#9ca3af;font-size:12px;">↓</div>
+          <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:11px;display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:700;color:#065f46;">3</span> Run handler via <code>void_app</code> role
+          </div>
+          <div style="text-align:center;color:#9ca3af;font-size:12px;">↓</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px;font-size:10px;text-align:center;color:#065f46;font-weight:700;">COMMIT ✓<br><span style="font-weight:400;color:#6b7280;">Row visible/writable</span></div>
+            <div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:4px;padding:8px;font-size:10px;text-align:center;color:#991b1b;font-weight:700;">FAIL ✗<br><span style="font-weight:400;color:#6b7280;">Errors loudly, never returns rows</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 DB roles -->
+      <div class="card">
+        <div class="card-title">Three Database Roles</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <div style="background:#f0fdf4;border:1.5px solid #6ee7b7;border-radius:4px;padding:10px 12px;">
+            <div style="font-size:10px;font-weight:700;color:#065f46;font-family:monospace;">void_app</div>
+            <div style="font-size:10px;color:#374151;margin-top:3px;line-height:1.4;">API + Worker runtime. Full DML, but every tenant-scoped table has <strong>FORCE ROW LEVEL SECURITY</strong>. Cannot cross tenants even with a hand-written query.</div>
+          </div>
+          <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:4px;padding:10px 12px;">
+            <div style="font-size:10px;font-weight:700;color:#92400e;font-family:monospace;">void_platform</div>
+            <div style="font-size:10px;color:#374151;margin-top:3px;line-height:1.4;">BYPASSRLS — but grants only on <code>tenants, roles, users, user_roles, wallets, invites</code>. <strong>No access to assets, licences, audit, jobs, API keys.</strong></div>
+          </div>
+          <div style="background:#f3f4f6;border:1.5px solid #d1d5db;border-radius:4px;padding:10px 12px;">
+            <div style="font-size:10px;font-weight:700;color:#374151;font-family:monospace;">schema owner</div>
+            <div style="font-size:10px;color:#374151;margin-top:3px;">Migrations and RLS application only. Never used to serve a request.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 17 tables -->
+    <div style="margin-top:14px;" class="card">
+      <div class="card-title">17 Tenant-Isolated Tables (+ tenants itself = 18 under RLS)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+        <code style="background:#eff6ff;border:1px solid #93c5fd;border-radius:3px;padding:3px 7px;font-size:10px;color:#1d4ed8;">users</code>
+        <code style="background:#eff6ff;border:1px solid #93c5fd;border-radius:3px;padding:3px 7px;font-size:10px;color:#1d4ed8;">user_roles</code>
+        <code style="background:#eff6ff;border:1px solid #93c5fd;border-radius:3px;padding:3px 7px;font-size:10px;color:#1d4ed8;">wallets</code>
+        <code style="background:#eff6ff;border:1px solid #93c5fd;border-radius:3px;padding:3px 7px;font-size:10px;color:#1d4ed8;">invites</code>
+        <code style="background:#eff6ff;border:1px solid #93c5fd;border-radius:3px;padding:3px 7px;font-size:10px;color:#1d4ed8;">tenant_settings</code>
+        <code style="background:#eff6ff;border:1px solid #93c5fd;border-radius:3px;padding:3px 7px;font-size:10px;color:#1d4ed8;">webhooks</code>
+        <code style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:3px;padding:3px 7px;font-size:10px;color:#065f46;">assets</code>
+        <code style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:3px;padding:3px 7px;font-size:10px;color:#065f46;">asset_versions</code>
+        <code style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:3px;padding:3px 7px;font-size:10px;color:#065f46;">ai_suggestions</code>
+        <code style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:3px;padding:3px 7px;font-size:10px;color:#065f46;">review_decisions</code>
+        <code style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:3px;padding:3px 7px;font-size:10px;color:#065f46;">review_comments</code>
+        <code style="background:#fee2e2;border:1px solid #fca5a5;border-radius:3px;padding:3px 7px;font-size:10px;color:#991b1b;">licenses</code>
+        <code style="background:#fef3c7;border:1px solid #fcd34d;border-radius:3px;padding:3px 7px;font-size:10px;color:#92400e;">api_keys</code>
+        <code style="background:#fef3c7;border:1px solid #fcd34d;border-radius:3px;padding:3px 7px;font-size:10px;color:#92400e;">notifications</code>
+        <code style="background:#fef3c7;border:1px solid #fcd34d;border-radius:3px;padding:3px 7px;font-size:10px;color:#92400e;">audit_logs</code>
+        <code style="background:#fef3c7;border:1px solid #fcd34d;border-radius:3px;padding:3px 7px;font-size:10px;color:#92400e;">jobs</code>
+        <code style="background:#fef3c7;border:1px solid #fcd34d;border-radius:3px;padding:3px 7px;font-size:10px;color:#92400e;">sessions</code>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §6 ASSET LIFECYCLE STATE MACHINE
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§6</span>
+      <h2 class="sec-title">Asset Lifecycle State Machine</h2>
+    </div>
+
+    <div class="lifecycle-wrap">
+      <!-- State nodes -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:9px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;margin-bottom:10px;">States</div>
+        <div class="state-grid">
+          <div class="state-node draft">DRAFT<br><span style="font-weight:400;font-size:8px;">editable</span></div>
+          <div class="state-node pending">PENDING<br><span style="font-weight:400;font-size:8px;">in assessor queue</span></div>
+          <div class="state-node manual">NEEDS MANUAL REVIEW<br><span style="font-weight:400;font-size:8px;">AI low confidence</span></div>
+          <div class="state-node approved">APPROVED<br><span style="font-weight:400;font-size:8px;">ready to publish</span></div>
+          <div class="state-node revision">REVISION<br><span style="font-weight:400;font-size:8px;">changes required</span></div>
+          <div class="state-node rejected">REJECTED<br><span style="font-weight:400;font-size:8px;">refused with reason</span></div>
+          <div class="state-node published">PUBLISHED<br><span style="font-weight:400;font-size:8px;">on-chain licence minted</span></div>
+        </div>
+      </div>
+
+      <!-- ASCII flow -->
+      <div style="background:#0f0f0e;border-radius:4px;padding:16px 20px;font-family:'Courier New',monospace;font-size:11px;color:#e5e7eb;line-height:1.9;margin-bottom:16px;">
+        <span style="color:#6ee7b7;">draft</span> ──submit──▶ <span style="color:#93c5fd;">pending</span> ──decision──▶ <span style="color:#6ee7b7;">approved</span> ──publish──▶ <span style="color:#34d399;font-weight:700;">published</span> (terminal)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├─▶ <span style="color:#fcd34d;">needs_manual_review</span> ─│─ assessor decides<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├─▶ <span style="color:#fca5a5;">revision</span> ──resubmit──┘<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └─▶ <span style="color:#f9a8d4;">rejected</span> ──new version
+      </div>
+
+      <!-- Transition rules -->
+      <div>
+        <div style="font-size:9px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;margin-bottom:10px;">Key Transition Rules</div>
+        <div class="state-transitions">
+          <div class="transition-rule warn">
+            <span class="rule-arrow">⚠</span>
+            <div><strong>Comment mandatory</strong> for <code>rejected</code> and <code>revision</code>. The creator must be told what to fix.</div>
+          </div>
+          <div class="transition-rule warn">
+            <span class="rule-arrow">⚠</span>
+            <div><strong>Self-review blocked.</strong> An assessor may not review their own asset — removes the self-approval hole.</div>
+          </div>
+          <div class="transition-rule ok">
+            <span class="rule-arrow">✓</span>
+            <div><code>published</code> is <strong>terminal.</strong> A takedown revokes the licence flag; the token is never burned.</div>
+          </div>
+          <div class="transition-rule ok">
+            <span class="rule-arrow">✓</span>
+            <div><strong>Deletion limited</strong> to <code>draft, pending, revision, rejected</code>. Anything approved or beyond is protected.</div>
+          </div>
+          <div class="transition-rule warn">
+            <span class="rule-arrow">⚠</span>
+            <div>Illegal transitions return <code>INVALID_STATUS_TRANSITION (409)</code>. The state machine is the contract.</div>
+          </div>
+          <div class="transition-rule note" style="border-left-color:#3b82f6;background:#eff6ff;">
+            <span class="rule-arrow">ℹ</span>
+            <div>Only <code>pending</code> and <code>needs_manual_review</code> appear in the review queue — it is a worklist, not a report.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §7 INGESTION PIPELINE
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§7</span>
+      <h2 class="sec-title">Ingestion Pipeline</h2>
+    </div>
+
+    <div class="pipeline-swim">
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#d81f26;">Creator</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#fff5f5;border:1px solid #fca5a5;color:#991b1b;">POST /assets<br>(multipart · streamed)</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#1d4ed8;">API</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Validate<br>ext + MIME + magic bytes</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Stream to<br>.staging/tenant/version</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Hash file<br>Read GLB metadata</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Create Asset +<br>Version (draft)</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Enqueue<br>ipfs-pin<br>ai-enrichment</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">201 Created<br>+ job ids</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#0f766e;">IPFS<br>Worker</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Stream file<br>to Kubo node</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Receive CID<br>(content hash)</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Store CID<br>Delete staging</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Enqueue<br>notify</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#5b21b6;">AI<br>Worker</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#ede9fe;border:1px solid #c4b5fd;color:#5b21b6;">Fetch model<br>via IPFS gateway</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#ede9fe;border:1px solid #c4b5fd;color:#5b21b6;">Claude classifies<br>+ describes</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#ede9fe;border:1px solid #c4b5fd;color:#5b21b6;">AISuggestion<br>confidence + tags</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;">If low confidence:<br>needs_manual_review</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#374151;">Creator<br>(submit)</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#f3f4f6;border:1px solid #d1d5db;color:#374151;">POST /assets/{id}/submit</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#f3f4f6;border:1px solid #d1d5db;color:#374151;">draft → pending</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Audit + notify enqueued</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;" class="grid-2">
+      <div class="callout note">
+        <span class="callout-icon">📦</span>
+        <div><strong>Streaming, not buffering.</strong> A 200 MB upload is written in chunks. Postgres only ever stores the CID — a database backup is not a 200 MB-per-asset problem.</div>
+      </div>
+      <div class="callout good">
+        <span class="callout-icon">🤖</span>
+        <div><strong>AI is advisory.</strong> Without <code>ANTHROPIC_API_KEY</code>, the offline enricher runs and reports low confidence rather than inventing certainty. No external credential is a hard dependency.</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §8 PUBLICATION & LICENSING
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§8</span>
+      <h2 class="sec-title">Publication &amp; On-Chain Licensing</h2>
+      <span class="sec-badge red">Most Consequential Flow</span>
+    </div>
+
+    <div class="callout crit">
+      <span class="callout-icon">⛓️</span>
+      <div><strong>The asset is promoted to <code>published</code> only after the mint receipt is in hand.</strong> A chain outage produces a failed job and an asset that stays <code>approved</code> — not a published asset without a licence.</div>
+    </div>
+
+    <div class="pipeline-swim" style="margin-top:14px;">
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#d81f26;">Assessor</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#fff5f5;border:1px solid #fca5a5;color:#991b1b;">POST /assets/{id}/publish</div>
+          <span class="swim-arr">→</span>
+          <div style="font-size:10px;color:#6b7280;font-style:italic;">asset stays <strong>approved</strong> — NOT published yet</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#1d4ed8;">API</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Require asset:publish<br>status = approved</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Hash licence terms<br>(sha256)</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;">Write licence intent<br>to Postgres</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Enqueue chain-license<br>202 Accepted</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#e84142;">Chain<br>Worker</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#fff5f5;border:2px solid #e84142;color:#991b1b;">Simulate mintLicense<br>(check before sending)</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#fff5f5;border:2px solid #e84142;color:#991b1b;">Send transaction<br>AssetLicenseRegistry</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Receipt: tokenId<br>blockNumber · gasUsed</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Write License row<br>Promote to <strong>published</strong></div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;">Audit with tx hash<br>+ Enqueue xr-publish</div>
+        </div>
+      </div>
+      <div class="swim-lane">
+        <div class="swim-actor" style="background:#6b7280;">Failure<br>Path</div>
+        <div class="swim-steps">
+          <div class="swim-step" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;">Chain unavailable after retries</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;">Job marked failed</div>
+          <span class="swim-arr">→</span>
+          <div class="swim-step" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;">Asset remains <strong>approved</strong><br>Operator can retry</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §9 BLOCKCHAIN SUBSYSTEM
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§9</span>
+      <h2 class="sec-title">Blockchain Subsystem — AssetLicenseRegistry (ERC-721)</h2>
+    </div>
+
+    <!-- Signing boundary -->
+    <div class="chain-flow" style="margin-bottom:16px;">
+      <div class="chain-node">
+        <span class="chain-icon">🌐</span>
+        <div class="chain-name">API Process</div>
+        <div class="chain-desc">No private key in env.<br>Enqueues <code>chain-license</code> job with IDs only — never a key, never a signed payload.</div>
+      </div>
+      <div class="chain-arr-wrap">→</div>
+      <div class="chain-node">
+        <span class="chain-icon">📮</span>
+        <div class="chain-name">Redis Queue</div>
+        <div class="chain-desc">Job payload carries identifiers only: asset id, CID, terms hash.</div>
+      </div>
+      <div class="chain-arr-wrap">→</div>
+      <div class="chain-node chain-signing">
+        <span class="chain-icon">🔑</span>
+        <div class="chain-name">Worker Process</div>
+        <div class="chain-desc"><strong>PLATFORM_SIGNER_SEED present.</strong><br>Simulate → send transaction → receive receipt.</div>
+      </div>
+      <div class="chain-arr-wrap">→</div>
+      <div class="chain-node">
+        <span class="chain-icon">⛓️</span>
+        <div class="chain-name">AssetLicenseRegistry</div>
+        <div class="chain-desc">ERC-721 on-chain. Anyone with ABI + RPC can verify licence validity independently.</div>
+      </div>
+    </div>
+
+    <!-- Contract functions -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Contract Functions</div>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;">
+          <tbody>
+            <tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-weight:600;color:#d81f26;">mintLicense()</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Publisher-only. Mints token, records terms hash + metadata CID</td></tr>
+            <tr style="background:#fafafa;"><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-weight:600;color:#374151;">revokeLicense()</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Marks revoked. <strong>Token is NOT burned</strong></td></tr>
+            <tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-weight:600;color:#065f46;">isLicenseValid()</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">The question marketplace and XR consumers ask</td></tr>
+            <tr style="background:#fafafa;"><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-weight:600;color:#374151;">tokenURI()</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Resolves to IPFS metadata document</td></tr>
+            <tr><td style="padding:6px 8px;font-family:monospace;font-weight:600;color:#374151;">licenseOf()</td><td style="padding:6px 8px;color:#6b7280;">Reads for licence registry and dashboards</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Dev vs Prod -->
+      <div class="card">
+        <div class="card-title">Chain Target: Dev → Production</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+          <div style="background:#f0fdf4;border:1.5px solid #6ee7b7;border-radius:4px;padding:12px;">
+            <div style="font-size:10px;font-weight:800;color:#065f46;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Dev / Demo — Now</div>
+            <div style="font-size:10px;color:#374151;line-height:1.6;">Anvil local EVM<br>Chain ID 31337<br>Instant finality<br>Fixed dev accounts</div>
+          </div>
+          <div style="background:#fff5f5;border:2px solid #e84142;border-radius:4px;padding:12px;">
+            <div style="font-size:10px;font-weight:800;color:#e84142;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Production Target</div>
+            <div style="font-size:10px;color:#374151;line-height:1.6;">Avalanche C-Chain<br>EVM-compatible<br>Sub-second finality<br>Same contract bytecode</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:#6b7280;line-height:1.5;">
+          <strong>Migration = configuration, not code.</strong> One constant (chain descriptor), one env var (RPC URL), one secret (managed key). Contract, ABI, client code: unchanged.
+        </div>
+        <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;">
+          <div style="background:#f3f4f6;border-radius:3px;padding:6px 8px;"><span style="color:#9ca3af;">Chain descriptor</span><br><strong>1 constant change</strong></div>
+          <div style="background:#f3f4f6;border-radius:3px;padding:6px 8px;"><span style="color:#9ca3af;">RPC endpoint</span><br><strong>1 env var</strong></div>
+          <div style="background:#f3f4f6;border-radius:3px;padding:6px 8px;"><span style="color:#9ca3af;">Signing key</span><br><strong>Secret mgmt only</strong></div>
+          <div style="background:#f3f4f6;border-radius:3px;padding:6px 8px;"><span style="color:#9ca3af;">Contract / ABI</span><br><strong style="color:#065f46;">Zero changes</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §10 ASYNC JOB PLATFORM
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§10</span>
+      <h2 class="sec-title">Async Job Platform — 6 BullMQ Queues</h2>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="job-table">
+        <thead>
+          <tr>
+            <th>Queue</th>
+            <th>Attempts</th>
+            <th>Backoff</th>
+            <th>Concurrency</th>
+            <th>On Exhaustion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="queue-pill pill-ai">ai-enrichment</span></td>
+            <td>2</td>
+            <td>fixed 2s</td>
+            <td>2</td>
+            <td>One retry with stricter prompt → <strong>needs_manual_review</strong></td>
+          </tr>
+          <tr>
+            <td><span class="queue-pill pill-ipfs">ipfs-pin</span></td>
+            <td>3</td>
+            <td>exponential 2s</td>
+            <td>4</td>
+            <td>Version marked <code>pinStatus: failed</code>, visible in console</td>
+          </tr>
+          <tr>
+            <td><span class="queue-pill pill-blend">blender-optimize</span></td>
+            <td>2</td>
+            <td>exponential 5s</td>
+            <td>1</td>
+            <td>Failure in job status; original version untouched</td>
+          </tr>
+          <tr>
+            <td><span class="queue-pill pill-chain">chain-license</span></td>
+            <td>3</td>
+            <td>exponential 3s</td>
+            <td>2</td>
+            <td>Job failed; asset stays <strong>approved</strong> — never silently published</td>
+          </tr>
+          <tr>
+            <td><span class="queue-pill pill-xr">xr-publish</span></td>
+            <td>3</td>
+            <td>exponential 3s</td>
+            <td>2</td>
+            <td>Retried; does not affect licence validity</td>
+          </tr>
+          <tr>
+            <td><span class="queue-pill pill-notif">notify</span></td>
+            <td>2</td>
+            <td>fixed 1s</td>
+            <td>4</td>
+            <td>Best-effort; a lost notification never blocks the workflow</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:12px;" class="grid-2">
+      <div class="callout note">
+        <span class="callout-icon">📊</span>
+        <div><strong>Jobs mirrored to Postgres.</strong> Every enqueued job has a row in <code>jobs</code>. The console polls SQL — no Redis tooling needed to diagnose stuck work.</div>
+      </div>
+      <div class="callout good">
+        <span class="callout-icon">🛡️</span>
+        <div><strong>Structural guarantees:</strong> Nothing sits between <code>markActive</code> and the try-block. A missing subject is an obsolete job, not a crash. Clearing Redis cannot corrupt application state.</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §11 RBAC MATRIX
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§11</span>
+      <h2 class="sec-title">Role-Based Access Control Matrix</h2>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="rbac-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Capability</th>
+            <th>Creator</th>
+            <th>Assessor</th>
+            <th>TenantAdmin</th>
+            <th>Developer</th>
+            <th>Viewer</th>
+            <th>SuperAdmin</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Upload &amp; edit own assets</td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Delete own unpublished assets</td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Submit for review</td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>View review queue</td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Approve / Reject / Request revision</td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Publish — mints the licence</td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Revoke a licence (takedown)</td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Manage members, roles, invitations</td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Create &amp; rotate API keys</td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>View audit ledger</td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Manage tenants (create / suspend)</td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Catalogue + REST read access</td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:#6b7280;">The same permission matrix lives in <code>packages/types/src/roles.ts</code> — both the API and the console import it, so the UI never offers an action the API would refuse.</div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §12 DATA MODEL
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§12</span>
+      <h2 class="sec-title">Data Model — 19 Tables</h2>
+    </div>
+
+    <div class="entity-grid">
+      <!-- ASSET -->
+      <div class="entity-box">
+        <div class="entity-head" style="background:#d81f26;">
+          <span class="entity-icon">📦</span> ASSET
+        </div>
+        <div class="entity-fields">
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK uuid</span></div>
+          <div class="entity-field"><span class="field-name">tenant_id</span><span class="field-fk">FK · RLS key</span></div>
+          <div class="entity-field"><span class="field-name">creator_id</span><span class="field-fk">FK → users</span></div>
+          <div class="entity-field"><span class="field-name">name, category</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">status</span><span class="field-type">enum · 7 states</span></div>
+          <div class="entity-field"><span class="field-name">current_version_id</span><span class="field-fk">FK → versions</span></div>
+          <div class="entity-field"><span class="field-name">xr_manifest_ref</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">published_at</span><span class="field-type">timestamp</span></div>
+        </div>
+      </div>
+
+      <!-- ASSET_VERSION -->
+      <div class="entity-box">
+        <div class="entity-head" style="background:#1d4ed8;">
+          <span class="entity-icon">🗂</span> ASSET_VERSION
+        </div>
+        <div class="entity-fields">
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK uuid</span></div>
+          <div class="entity-field"><span class="field-name">asset_id</span><span class="field-fk">FK → assets</span></div>
+          <div class="entity-field"><span class="field-name">version_number</span><span class="field-type">int</span></div>
+          <div class="entity-field"><span class="field-name">format, size_bytes</span><span class="field-type">string / int</span></div>
+          <div class="entity-field"><span class="field-name">polycount, vertices</span><span class="field-type">int · measured</span></div>
+          <div class="entity-field"><span class="field-name">ipfs_cid</span><span class="field-type">string · content addr</span></div>
+          <div class="entity-field"><span class="field-name">pin_status</span><span class="field-type">enum</span></div>
+          <div class="entity-field"><span class="field-name">mesh_metadata</span><span class="field-type">json</span></div>
+        </div>
+      </div>
+
+      <!-- LICENSE -->
+      <div class="entity-box">
+        <div class="entity-head" style="background:#e84142;">
+          <span class="entity-icon">📜</span> LICENSE
+        </div>
+        <div class="entity-fields">
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK uuid</span></div>
+          <div class="entity-field"><span class="field-name">asset_id</span><span class="field-fk">FK</span></div>
+          <div class="entity-field"><span class="field-name">asset_version_id</span><span class="field-fk">FK · binds to file</span></div>
+          <div class="entity-field"><span class="field-name">token_id</span><span class="field-type">ERC-721 token</span></div>
+          <div class="entity-field"><span class="field-name">tx_hash, block_number</span><span class="field-type">chain receipt</span></div>
+          <div class="entity-field"><span class="field-name">ipfs_metadata_cid</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">license_terms_hash</span><span class="field-type">sha256</span></div>
+          <div class="entity-field"><span class="field-name">revoked_tx_hash</span><span class="field-type">nullable</span></div>
+        </div>
+      </div>
+
+      <!-- AI_SUGGESTION -->
+      <div class="entity-box">
+        <div class="entity-head" style="background:#5b21b6;">
+          <span class="entity-icon">🤖</span> AI_SUGGESTION
+        </div>
+        <div class="entity-fields">
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK uuid</span></div>
+          <div class="entity-field"><span class="field-name">asset_version_id</span><span class="field-fk">FK</span></div>
+          <div class="entity-field"><span class="field-name">suggested_tags</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">suggested_description</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">confidence</span><span class="field-type">float</span></div>
+          <div class="entity-field"><span class="field-name">needs_manual_review</span><span class="field-type">bool</span></div>
+        </div>
+      </div>
+
+      <!-- AUDIT_LOG -->
+      <div class="entity-box">
+        <div class="entity-head" style="background:#0f766e;">
+          <span class="entity-icon">📋</span> AUDIT_LOG
+        </div>
+        <div class="entity-fields">
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK uuid</span></div>
+          <div class="entity-field"><span class="field-name">actor_id</span><span class="field-fk">FK · role at time</span></div>
+          <div class="entity-field"><span class="field-name">action, entity_type</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">before_state, after_state</span><span class="field-type">json</span></div>
+          <div class="entity-field"><span class="field-name">tx_hash, block_number</span><span class="field-type">chain link</span></div>
+          <div class="entity-field"><span class="field-name">ipfs_cid</span><span class="field-type">content link</span></div>
+          <div class="entity-field"><span class="field-name">request_id</span><span class="field-type">correlation</span></div>
+          <div class="entity-field" style="border:none;"><em style="font-size:9px;color:#d81f26;">No UPDATE/DELETE on this table</em></div>
+        </div>
+      </div>
+
+      <!-- JOB -->
+      <div class="entity-box">
+        <div class="entity-head" style="background:#374151;">
+          <span class="entity-icon">⚙️</span> JOB
+        </div>
+        <div class="entity-fields">
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK uuid</span></div>
+          <div class="entity-field"><span class="field-name">tenant_id</span><span class="field-fk">FK</span></div>
+          <div class="entity-field"><span class="field-name">queue</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">status</span><span class="field-type">enum</span></div>
+          <div class="entity-field"><span class="field-name">entity_type, entity_id</span><span class="field-type">subject</span></div>
+          <div class="entity-field"><span class="field-name">payload</span><span class="field-type">json</span></div>
+          <div class="entity-field"><span class="field-name">attempts / max_attempts</span><span class="field-type">int</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;" class="callout note">
+      <span class="callout-icon">💡</span>
+      <div><strong>Key design decision:</strong> <code>licenses.asset_version_id</code> is distinct from <code>assets.id</code> — the terms hash on-chain commits to a specific file. Without this, "what exactly was licensed?" is unanswerable. <code>audit_logs</code> is append-only by <em>grant</em>: the runtime role holds no UPDATE or DELETE on it.</div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §13 API SURFACE
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§13</span>
+      <h2 class="sec-title">API Surface — 51 Operations, 11 Modules</h2>
+    </div>
+
+    <div class="api-modules">
+      <div class="api-module">
+        <div class="api-mod-name">Auth <span class="api-ops-count">13 ops</span></div>
+        <div class="api-endpoints">login · register · refresh<br>logout · me · password<br>providers · sessions · token</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">SSO + Wallet <span class="api-ops-count">5 ops</span></div>
+        <div class="api-endpoints">google/start · callback<br>siwe/nonce · siwe/verify<br>invite/accept</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Assets <span class="api-ops-count">12 ops</span></div>
+        <div class="api-endpoints">GET/POST /assets<br>GET/PATCH/DELETE /{id}<br>versions · submit · comments<br>decisions · publish · revoke</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Review <span class="api-ops-count">2 ops</span></div>
+        <div class="api-endpoints">GET /review/queue<br>GET /review/stats</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Catalogue + Licences <span class="api-ops-count">2 ops</span></div>
+        <div class="api-endpoints">GET /licenses<br>GET /licenses/{tokenId}</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Tenancy <span class="api-ops-count">5 ops</span></div>
+        <div class="api-endpoints">GET /tenant · PATCH /settings<br>GET /tenants<br>PATCH /tenants/{id}/status<br>GET /roles</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Users <span class="api-ops-count">6 ops</span></div>
+        <div class="api-endpoints">GET/POST /users<br>POST /users/invite<br>GET /users/invites<br>PATCH/DELETE /users/{id}</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Audit + Notifications <span class="api-ops-count">4 ops</span></div>
+        <div class="api-endpoints">GET /audit<br>GET /notifications · /count<br>POST /notifications/read</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Dashboard <span class="api-ops-count">1 op</span></div>
+        <div class="api-endpoints">GET /dashboard<br>Any authenticated member</div>
+      </div>
+      <div class="api-module">
+        <div class="api-mod-name">Health <span class="api-ops-count">1 op</span></div>
+        <div class="api-endpoints">GET /health<br>Public</div>
+      </div>
+      <div class="api-module" style="background:#f9fafb;border:1.5px solid #d1d5db;">
+        <div class="api-mod-name" style="color:#6b7280;">Conventions</div>
+        <div class="api-endpoints" style="color:#6b7280;">Versioned /api/v1<br>Uniform pagination<br>Stable sort order<br>Error envelope: code+msg+requestId</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §14 SECURITY POSTURE
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§14</span>
+      <h2 class="sec-title">Security Posture</h2>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="sec-table">
+        <thead>
+          <tr>
+            <th>Concern</th>
+            <th>Control</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="sec-concern">Transport</span></td><td><span class="shield">🔒</span>TLS 1.2+ only, HSTS, HTTP redirected to HTTPS at the edge</td></tr>
+          <tr><td><span class="sec-concern">Brute Force</span></td><td><span class="shield">🛡</span>Rate limits at nginx per client (50 r/s API, 100 r/s general) + per-endpoint limits on auth</td></tr>
+          <tr><td><span class="sec-concern">Credential Storage</span></td><td><span class="shield">🔒</span>bcrypt cost 12 for passwords; API keys and refresh tokens stored as hashes with visible prefix only</td></tr>
+          <tr><td><span class="sec-concern">Session Theft</span></td><td><span class="shield">🛡</span>Short-lived access tokens, rotating refresh tokens, reuse detection revokes session family, HttpOnly + Secure + SameSite cookies, refresh cookie path-scoped to /api/v1/auth</td></tr>
+          <tr><td><span class="sec-concern">Authorisation</span></td><td><span class="shield">🔒</span>Single permission matrix, re-resolved per request from database, enforced in preHandler</td></tr>
+          <tr><td><span class="sec-concern">Tenant Isolation</span></td><td><span class="shield">🛡</span>Forced RLS on 18 tables + boot-time assertion that refuses to run with a bypassing role</td></tr>
+          <tr><td><span class="sec-concern">Upload Abuse</span></td><td><span class="shield">🔒</span>Extension AND MIME validation plus magic-byte sniffing, 200 MB ceiling, streamed to per-tenant staging path</td></tr>
+          <tr><td><span class="sec-concern">Enumeration</span></td><td><span class="shield">🛡</span>Assets a caller may not see answer 404, not 403 — the API cannot be used to probe another workspace</td></tr>
+          <tr><td><span class="sec-concern">Chain Key Exposure</span></td><td><span class="shield">🔒</span>No signing key in the API environment; only the worker holds it; job payloads carry identifiers only</td></tr>
+          <tr><td><span class="sec-concern">Supply Chain</span></td><td><span class="shield">🛡</span>Zero external Solidity dependencies; audited dependency set; lockfile committed</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §15 DEPLOYMENT TOPOLOGY
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§15</span>
+      <h2 class="sec-title">Deployment Topology — 10 Containers, 4 Docker Profiles</h2>
+    </div>
+
+    <div class="topo-wrap">
+      <!-- Users -->
+      <div style="text-align:center;margin-bottom:10px;">
+        <div style="display:inline-flex;gap:8px;align-items:center;">
+          <div class="topo-node" style="background:#f3f4f6;border:1.5px solid #d1d5db;color:#374151;">Browser / API client</div>
+          <div style="color:#9ca3af;font-size:18px;">⟶ HTTPS ⟶</div>
+          <div class="topo-node" style="background:#0f0f0e;border:2px solid #0f0f0e;color:#fff;font-weight:700;">nginx :80/:443<br><span style="font-size:9px;font-weight:400;color:#9ca3af;">ONLY exposed ports</span></div>
+        </div>
+      </div>
+
+      <div class="topo-connector">↓ proxy ↓</div>
+
+      <!-- App profile -->
+      <div class="topo-profile">
+        <div class="topo-profile-label">app profile</div>
+        <div class="topo-nodes">
+          <div class="topo-node" style="background:#fff5f5;border:1.5px solid #fca5a5;color:#991b1b;">web :3000<br><span style="font-size:9px;color:#9ca3af;">Next.js console</span></div>
+          <div class="topo-node" style="background:#fff5f5;border:1.5px solid #fca5a5;color:#991b1b;">api :4000<br><span style="font-size:9px;color:#9ca3af;">Fastify REST</span></div>
+          <div class="topo-node" style="background:#fff5f5;border:2px solid #d81f26;color:#991b1b;">worker<br><span style="font-size:9px;color:#9ca3af;">6 BullMQ consumers<br>holds signing key</span></div>
+        </div>
+      </div>
+
+      <div class="topo-connector">↓ backed by ↓</div>
+
+      <!-- Infra profile -->
+      <div class="topo-profile">
+        <div class="topo-profile-label">infra profile</div>
+        <div class="topo-nodes">
+          <div class="topo-node" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1e40af;">postgres :5432<br><span style="font-size:9px;color:#9ca3af;">vol: pgdata</span></div>
+          <div class="topo-node" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1e40af;">redis :6379<br><span style="font-size:9px;color:#9ca3af;">vol: redisdata</span></div>
+          <div class="topo-node" style="background:#d1fae5;border:1.5px solid #6ee7b7;color:#065f46;">ipfs :5001/:8080<br><span style="font-size:9px;color:#9ca3af;">vols: ipfsdata, ipfscache</span></div>
+          <div class="topo-node" style="background:#fff5f5;border:2px solid #e84142;color:#991b1b;">anvil :8545<br><span style="font-size:9px;color:#9ca3af;">vol: contractsdata</span></div>
+          <div class="topo-node" style="background:#f3f4f6;border:1.5px solid #d1d5db;color:#374151;">deploy-contracts<br><span style="font-size:9px;color:#9ca3af;">one-shot: migrate · RLS · deploy</span></div>
+        </div>
+      </div>
+
+      <!-- Blender profile -->
+      <div class="topo-profile" style="margin-bottom:0;">
+        <div class="topo-profile-label">blender profile (optional)</div>
+        <div class="topo-nodes">
+          <div class="topo-node" style="background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;">blender-runner<br><span style="font-size:9px;color:#9ca3af;">headless format conversion<br>vol: blenderjobs</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bring-up sequence -->
+    <div style="margin-top:14px;" class="card">
+      <div class="card-title">Bring-Up Sequence (pnpm dev:up — idempotent)</div>
+      <div style="display:flex;gap:0;margin-top:10px;flex-wrap:wrap;">
+        <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#065f46;flex:1;min-width:120px;text-align:center;">① Start infra<br>+ health checks</div>
+        <div style="display:flex;align-items:center;padding:0 4px;color:#9ca3af;">→</div>
+        <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#065f46;flex:1;min-width:120px;text-align:center;">② Generate TLS certs</div>
+        <div style="display:flex;align-items:center;padding:0 4px;color:#9ca3af;">→</div>
+        <div style="background:#fff5f5;border:2px solid #e84142;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#991b1b;flex:1;min-width:120px;text-align:center;">③ deploy-contracts<br>Migrate · RLS · Deploy ERC-721</div>
+        <div style="display:flex;align-items:center;padding:0 4px;color:#9ca3af;">→</div>
+        <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#065f46;flex:1;min-width:120px;text-align:center;">④ Apply RLS<br>Verify coverage</div>
+        <div style="display:flex;align-items:center;padding:0 4px;color:#9ca3af;">→</div>
+        <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#065f46;flex:1;min-width:120px;text-align:center;">⑤ Seed<br>idempotent</div>
+        <div style="display:flex;align-items:center;padding:0 4px;color:#9ca3af;">→</div>
+        <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:8px 12px;font-size:10px;font-weight:600;color:#065f46;flex:1;min-width:120px;text-align:center;">⑥ Start edge<br>+ app services</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §16 NON-FUNCTIONAL REQUIREMENTS
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§16</span>
+      <h2 class="sec-title">Non-Functional Requirements → Mechanism</h2>
+    </div>
+
+    <div class="nfr-grid">
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-PERF.2</div>
+        <div class="nfr-text">Uploads up to 200 MB without exhausting memory</div>
+        <div class="nfr-mech">Streamed multipart to disk; worker streams to IPFS one chunk at a time</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-PERF.4</div>
+        <div class="nfr-text">Repeat IPFS reads served from cache</div>
+        <div class="nfr-mech">nginx gateway cache; safe because content is immutable (CID = hash)</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-REL.1</div>
+        <div class="nfr-text">Externally-dependent work must not block requests</div>
+        <div class="nfr-mech">6 queues with documented retries; nothing slow runs inside a request</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-REL.2</div>
+        <div class="nfr-text">A chain outage must not corrupt asset state</div>
+        <div class="nfr-mech">Promote-to-published only after mint receipt exists in hand</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-SEC.3</div>
+        <div class="nfr-text">Upload validation beyond the file extension</div>
+        <div class="nfr-mech">Extension + MIME + magic-byte sniffing + 200 MB ceiling</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-SEC.5</div>
+        <div class="nfr-text">Tenant isolation must be verifiable, not assumed</div>
+        <div class="nfr-mech">Forced RLS on 18 tables, boot-time role assertion, isolation tests</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-SCAL.1</div>
+        <div class="nfr-text">Worker throughput must be tunable per queue</div>
+        <div class="nfr-mech">Per-queue defaultConcurrency, overridable per worker via env</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-SCAL.2</div>
+        <div class="nfr-text">API and worker must scale independently</div>
+        <div class="nfr-mech">Stateless API + separate worker process; shared state = Postgres/Redis/IPFS only</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-OBS.1</div>
+        <div class="nfr-text">Every action must be attributable</div>
+        <div class="nfr-mech">Correlation id on every request; append-only audit ledger with request id, tx hash, IPFS CID</div>
+      </div>
+      <div class="nfr-item">
+        <div class="nfr-code">NFR-PORT.1</div>
+        <div class="nfr-text">Chain portability</div>
+        <div class="nfr-mech">EVM-only contract, viem typed client, chain chosen by configuration alone</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §17 TEST COVERAGE
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§17</span>
+      <h2 class="sec-title">Verification &amp; Test Coverage — 275 Tests</h2>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Tests by Suite</div>
+        <div class="test-bars" style="margin-top:10px;">
+          <div class="test-row">
+            <div>apps/api</div>
+            <div class="test-bar-track"><div class="test-bar-fill" style="width:100%"></div></div>
+            <div class="test-count">91</div>
+          </div>
+          <div class="test-row">
+            <div>packages/db</div>
+            <div class="test-bar-track"><div class="test-bar-fill" style="width:75%"></div></div>
+            <div class="test-count">43</div>
+          </div>
+          <div class="test-row">
+            <div>apps/worker</div>
+            <div class="test-bar-track"><div class="test-bar-fill" style="width:72%"></div></div>
+            <div class="test-count">58</div>
+          </div>
+          <div class="test-row">
+            <div>packages/contracts</div>
+            <div class="test-bar-track"><div class="test-bar-fill" style="width:61%"></div></div>
+            <div class="test-count">35</div>
+          </div>
+          <div class="test-row">
+            <div>packages/types</div>
+            <div class="test-bar-track"><div class="test-bar-fill" style="width:49%"></div></div>
+            <div class="test-count">28</div>
+          </div>
+          <div class="test-row">
+            <div>apps/web</div>
+            <div class="test-bar-track"><div class="test-bar-fill" style="width:35%"></div></div>
+            <div class="test-count">20</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">What the Suites Prove</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;font-size:11px;">
+          <div style="display:flex;gap:8px;"><span style="color:#d81f26;font-weight:700;flex-shrink:0;">API</span><span style="color:#374151;">Auth flows, RBAC matrix, tenant isolation, lifecycle transitions, upload validation, publication guards</span></div>
+          <div style="display:flex;gap:8px;"><span style="color:#1d4ed8;font-weight:700;flex-shrink:0;">DB</span><span style="color:#374151;">RLS coverage audit, cross-tenant invisibility, append-only audit, GLB fixture integrity</span></div>
+          <div style="display:flex;gap:8px;"><span style="color:#6b7280;font-weight:700;flex-shrink:0;">Worker</span><span style="color:#374151;">Queue policy transcription, enrichment fallbacks, chain client behaviour, job bookkeeping</span></div>
+          <div style="display:flex;gap:8px;"><span style="color:#e84142;font-weight:700;flex-shrink:0;">Chain</span><span style="color:#374151;">Minting, access control, revocation as flag, token metadata, adoption, idempotency (35 Foundry tests)</span></div>
+          <div style="display:flex;gap:8px;"><span style="color:#0f766e;font-weight:700;flex-shrink:0;">Types</span><span style="color:#374151;">Lifecycle and permission matrices match the SRS table cell by cell</span></div>
+          <div style="display:flex;gap:8px;"><span style="color:#374151;font-weight:700;flex-shrink:0;">Web</span><span style="color:#374151;">Mesh-statistics comparison, formatting, client-side contract behaviour</span></div>
+        </div>
+        <div style="margin-top:14px;padding:10px 12px;background:#f0fdf4;border-radius:4px;font-size:10px;color:#065f46;line-height:1.6;">
+          <strong>Tests run against the real stack</strong> — real Postgres with real RLS, real Redis, real EVM chain. Cross-tenant isolation tested against a mock proves nothing.
+        </div>
+        <div style="margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+          <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:8px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:#0f0f0e;">12</div>
+            <div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">typecheck tasks</div>
+          </div>
+          <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:8px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:#0f0f0e;">0</div>
+            <div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">lint warnings</div>
+          </div>
+          <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:8px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:#0f0f0e;">8</div>
+            <div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">build tasks</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       §18 ROADMAP
+       ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">§18</span>
+      <h2 class="sec-title">Roadmap — Built vs. Designed vs. Hardening</h2>
+    </div>
+
+    <div class="roadmap-cols">
+      <!-- Built -->
+      <div class="roadmap-col">
+        <div class="roadmap-col-head" style="background:#065f46;">✓ Built &amp; Verified Today</div>
+        <div class="roadmap-col-body">
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#065f46;"></div>
+            <div>Ingestion · IPFS · AI enrichment · Review workflow</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#065f46;"></div>
+            <div>ERC-721 licensing on-chain · Takedown / revocation</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#065f46;"></div>
+            <div>Operations console · 3D viewer · Audit ledger · In-app notifications</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#065f46;"></div>
+            <div>RBAC · RLS · Google SSO · SIWE wallet · API keys</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#065f46;"></div>
+            <div>Blender conversion · vendor search importers · outbound webhooks</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#065f46;"></div>
+            <div>Public catalogue — cross-tenant projection, read anonymously</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Designed -->
+      <div class="roadmap-col">
+        <div class="roadmap-col-head" style="background:#d81f26;">🔌 Needs a Third-Party Account</div>
+        <div class="roadmap-col-body">
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#d81f26;"></div>
+            <div><strong>Blender conversion, real mode</strong><br>Processor and runner exist; the ~1 GB image is not in <code>dev:up</code></div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#d81f26;"></div>
+            <div><strong>Vendor search, live</strong><br>Adapters exist; need API keys and outbound network</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#d81f26;"></div>
+            <div><strong>Email delivery</strong><br>Notifications are in-app only today</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Production hardening -->
+      <div class="roadmap-col">
+        <div class="roadmap-col-head" style="background:#374151;">⚙ Production Hardening</div>
+        <div class="roadmap-col-body">
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#6b7280;"></div>
+            <div><strong>Avalanche C-Chain</strong> + managed / HSM-backed signer</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#6b7280;"></div>
+            <div><strong>IPFS pinning service</strong> · redundant pinning</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#6b7280;"></div>
+            <div><strong>Horizontal worker scaling</strong><br>Stateless; concurrency env vars already wired</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#6b7280;"></div>
+            <div><strong>Public anonymous catalogue</strong><br>Needs deliberate cross-tenant read path</div>
+          </div>
+          <div class="roadmap-item">
+            <div class="roadmap-dot" style="background:#6b7280;"></div>
+            <div><strong>Playwright E2E browser suite</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;" class="callout note">
+      <span class="callout-icon">📝</span>
+      <div><strong>Each item in the middle column</strong> has its contract, queue, processor and tests already in place. What is missing is a third-party account or a production target, not the adapter — so “pending” was the wrong word for it.</div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       FOOTER
+       ══════════════════════════════════════════════ -->
+  <div style="border-top:2px solid #0f0f0e;padding-top:20px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#9ca3af;margin-top:24px;">
+    <div>
+      <strong style="color:#0f0f0e;">VOID·SPACE Platform Architecture</strong> — v2.0<br>
+      Multi-tenant 3D/XR asset lifecycle · Ingestion → AI → Review → IPFS → ERC-721 → XR
+    </div>
+    <div style="text-align:right;">
+      All counts read from the running system, not the specification.<br>
+      Diagrams are representative — source-of-truth is the codebase.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

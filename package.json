@@ -1,0 +1,52 @@
+{
+  "name": "void-space",
+  "version": "2.0.0",
+  "private": true,
+  "description": "VOID\u00b7SPACE \u2014 AI-enhanced, multi-tenant 3D Digital Asset Management & XR publishing platform (VS-SRS-2.0)",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "certs": "bash docker/scripts/gen-dev-certs.sh",
+    "dev:up": "node scripts/dev-up.mjs",
+    "dev:down": "node scripts/dev-down.mjs",
+    "dev:logs": "docker compose logs -f --tail=50",
+    "dev:ps": "docker compose ps",
+    "infra:up": "docker compose --profile infra --profile edge up -d",
+    "infra:down": "docker compose --profile infra --profile edge down",
+    "db:generate": "pnpm --filter @void-space/db generate",
+    "db:migrate": "pnpm --filter @void-space/db migrate:deploy",
+    "db:rls": "pnpm --filter @void-space/db rls:apply",
+    "db:seed": "pnpm --filter @void-space/db seed",
+    "db:reset": "pnpm --filter @void-space/db reset",
+    "db:studio": "pnpm --filter @void-space/db studio",
+    "contracts:build": "pnpm --filter @void-space/contracts build",
+    "contracts:test": "pnpm --filter @void-space/contracts test",
+    "contracts:abi": "pnpm --filter @void-space/contracts export:abi",
+    "contracts:deploy": "pnpm --filter @void-space/contracts deploy",
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @void-space/web test:e2e",
+    "lint": "eslint .",
+    "format": "prettier --write \"{apps,packages,scripts,docker}/**/*.{ts,tsx,js,mjs,json,md,yml,yaml,css}\"",
+    "demo:publish": "node scripts/demo-publish.mjs",
+    "stack:up": "docker compose --profile infra --profile edge --profile app up -d --build",
+    "stack:down": "docker compose --profile infra --profile edge --profile app down",
+    "stack:logs": "docker compose --profile app logs -f --tail=80 api worker web",
+    "assets:thumbnails": "node scripts/render-thumbnails.mjs",
+    "ui:classes": "node scripts/check-classes-resolve.mjs",
+    "db:sync-catalog": "pnpm --filter @void-space/db sync-catalog"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^20.17.10",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.18.1"
+  }
+}
